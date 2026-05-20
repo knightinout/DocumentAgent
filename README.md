@@ -98,9 +98,9 @@ Input (image / PDF)
 
 ### Phase 1 — API-Based Web Demo
 
-- [ ] Streamlit app with Landing AI AIDE API integration
+- [x] Streamlit app with Landing AI AIDE API integration
 - [ ] Jupyter notebook for feasibility testing and model comparison
-- [ ] Support developer API key input in UI
+- [x] Support developer API key input in UI
 - [ ] Preview mode (free) vs full agent mode (paid / API key required)
 
 ### Phase 2 — Local Model Support
@@ -152,19 +152,44 @@ Input (image / PDF)
 
 ## Getting Started
 
-> Setup instructions will be added as Phase 1 development progresses.
+### 1. Clone the repository
 
 ```bash
-# Clone the repository
 git clone https://github.com/<your-org>/DocumentAgent.git
 cd DocumentAgent
+```
 
-# Install dependencies
+### 2. Set up API key
+
+```bash
+cp .env.example .env
+```
+
+Open `.env` and add your key (get one at [landing.ai](https://landing.ai)):
+
+```
+VISION_AGENT_API_KEY=your_key_here
+```
+
+### 3. Install and run
+
+**Linux / macOS**
+```bash
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
-
-# Run the Streamlit demo
 streamlit run app.py
 ```
+
+**Windows**
+```powershell
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+streamlit run app.py
+```
+
+The app opens at `http://localhost:8501`. Upload a document or pick a sample from the `samples/` folder, select a model, and click **Extract**.
 
 ---
 
