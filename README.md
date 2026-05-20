@@ -108,6 +108,25 @@ The app opens at `http://localhost:8501`. Upload a document or pick a sample fro
 
 ---
 
+## Running the Notebook
+
+`notebook/DocumentAgent_notebook.ipynb` demonstrates DocumentAgent's AIDE-powered extraction with Tesseract shown as a legacy OCR baseline.
+
+```bash
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+jupyter notebook notebook/DocumentAgent_notebook.ipynb
+```
+
+A valid `VISION_AGENT_API_KEY` in your `.env` is required for the Landing AI cells. The Tesseract cells run fully offline.
+
+> **Note:** Tesseract must be installed at the OS level.
+> - Linux: `sudo apt install tesseract-ocr`
+> - macOS: `brew install tesseract`
+> - Windows: [UB-Mannheim installer](https://github.com/UB-Mannheim/tesseract/wiki)
+
+---
+
 ## Contributing
 
 Contributions are welcome. Please open an issue to discuss proposed changes before submitting a pull request.
