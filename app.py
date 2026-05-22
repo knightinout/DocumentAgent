@@ -44,6 +44,8 @@ api_key = st.sidebar.text_input(
     help="Set VISION_AGENT_API_KEY in your .env file, or paste it here.",
 )
 
+is_preview_mode = not bool(api_key.strip())
+
 model = st.sidebar.selectbox(
     "Model",
     options=["dpt-2-latest", "dpt-2-mini"],
@@ -60,7 +62,32 @@ st.sidebar.info(
 )
 
 # --- Main area ---
-st.title("DocumentAgent")
+if is_preview_mode:
+    st.title("DocumentAgent (Preview Mode)")
+    st.markdown(
+        """
+        <div style="background-color:#fff3cd; color:#856404; padding:15px; border-radius:8px; margin-bottom:20px; border:1px solid #ffeeba; font-size:16px;">
+            <strong> PREVIEW MODE ACTIVE</strong><br>
+            No Landing AI API Key was provided. You can explore the UI, but extraction will use a static sample.<br>
+            Get a key at <a href="https://landing.ai" target="_blank" style="color:#856404; font-weight:bold; text-decoration:underline;">landing.ai</a> and enter it in the sidebar to enable full extraction.
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+    with st.expander("Watch Demo Video"):
+        st.video("https://youtu.be/JJOMELVWtwg")  # Placeholder video
+else:
+    st.title("DocumentAgent (Full Mode)")
+    st.markdown(
+        """
+        <div style="background-color:#d1e7dd; color:#0f5132; padding:15px; border-radius:8px; margin-bottom:20px; border:1px solid #badbcc; font-size:16px;">
+            <strong>FULL MODE ACTIVE</strong><br>
+            API Key detected. Documents will be sent to Landing AI for actual extraction.
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
 st.caption("Extract markdown text from documents using Landing AI AIDE.")
 
 sample_files = get_sample_files()
@@ -89,8 +116,42 @@ else:
 
 # --- Extract button ---
 if st.button("Extract", type="primary"):
-    if not api_key:
-        st.error("API key is required. Add it to your .env file or enter it in the sidebar.")
+    if is_preview_mode:
+        with st.spinner("Extracting document (simulated)…"):
+            import time
+            time.sleep(1.5)
+            
+        st.success("Done (Simulated) — 1 page(s), 0 credits used, 1500ms")
+        
+        sample_markdown = """# Invoice #INV-2023-001
+**Date**: October 24, 2023
+**Company**: Acme Corp Ltd.
+**Address**: 123 Industrial Estate, Mumbai, MH, 400001
+
+## Items
+
+| Description | Quantity | Unit Price (₹) | Total (₹) |
+|---|---|---|---|
+| Industrial Steel Pipes (Grade A) | 50 | 500.00 | 25,000.00 |
+| Heavy Duty Valves | 10 | 1,500.00 | 15,000.00 |
+| Installation Services | 1 | 10,000.00 | 10,000.00 |
+
+---
+**Subtotal**: ₹50,000.00
+**Tax (18% GST)**: ₹9,000.00
+**Grand Total**: ₹59,000.00
+
+*Note: This is a static sample for preview mode.*
+"""
+        
+        st.download_button(
+            label="Download extracted text (.md)",
+            data=sample_markdown,
+            file_name="extracted_sample.md",
+            mime="text/markdown",
+        )
+        st.markdown("---")
+        st.markdown(sample_markdown)
         st.stop()
 
     doc_bytes: bytes | None = None
