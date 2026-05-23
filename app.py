@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 import streamlit as st
+import streamlit.components.v1 as components
 from dotenv import load_dotenv
 from landingai_ade import LandingAIADE
 
@@ -44,7 +45,75 @@ api_key = st.sidebar.text_input(
     help="Set VISION_AGENT_API_KEY in your .env file, or paste it here.",
 )
 
-is_preview_mode = not bool(api_key.strip())
+if "last_api_key" not in st.session_state:
+    st.session_state.last_api_key = api_key
+    st.session_state.is_preview_mode = not bool(api_key.strip())
+elif st.session_state.last_api_key != api_key:
+    st.session_state.is_preview_mode = not bool(api_key.strip())
+    st.session_state.last_api_key = api_key
+
+st.sidebar.markdown("### Mode")
+col1, col2 = st.sidebar.columns(2)
+with col1:
+    if st.button("Demo Mode", use_container_width=True):
+        st.session_state.is_preview_mode = True
+with col2:
+    if st.button("Full Mode", use_container_width=True):
+        st.session_state.is_preview_mode = False
+
+is_preview_mode = st.session_state.is_preview_mode
+
+if is_preview_mode:
+    bg_color = "rgba(255, 193, 7, 0.1)"
+else:
+    bg_color = "rgba(25, 135, 84, 0.1)"
+
+st.markdown(
+    f"""
+    <style>
+    [data-testid="stAppViewContainer"] {{
+        background-color: {bg_color} !important;
+    }}
+    [data-testid="stHeader"] {{
+        background-color: transparent !important;
+    }}
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+components.html(
+    """
+    <script>
+    const buttons = window.parent.document.querySelectorAll('button');
+    buttons.forEach(b => {
+        if (b.innerText.includes('Demo Mode')) {
+            b.style.backgroundColor = '#ffc107';
+            b.style.color = 'black';
+            b.style.border = '1px solid #d39e00';
+            b.style.fontWeight = '600';
+            const p = b.querySelector('p');
+            if (p) {
+                p.style.color = 'black';
+                p.style.fontWeight = '600';
+            }
+        } else if (b.innerText.includes('Full Mode')) {
+            b.style.backgroundColor = '#198754';
+            b.style.color = 'white';
+            b.style.border = '1px solid #146c43';
+            b.style.fontWeight = '600';
+            const p = b.querySelector('p');
+            if (p) {
+                p.style.color = 'white';
+                p.style.fontWeight = '600';
+            }
+        }
+    });
+    </script>
+    """,
+    height=0,
+    width=0
+)
 
 model = st.sidebar.selectbox(
     "Model",
@@ -68,7 +137,7 @@ if is_preview_mode:
         """
         <div style="background-color:#fff3cd; color:#856404; padding:15px; border-radius:8px; margin-bottom:20px; border:1px solid #ffeeba; font-size:16px;">
             <strong> PREVIEW MODE ACTIVE</strong><br>
-            No Landing AI API Key was provided. You can explore the UI, but extraction will use a static sample.<br>
+            You can explore the UI, but extraction will use a static sample.<br>
             Get a key at <a href="https://landing.ai" target="_blank" style="color:#856404; font-weight:bold; text-decoration:underline;">landing.ai</a> and enter it in the sidebar to enable full extraction.
         </div>
         """,
@@ -82,7 +151,7 @@ else:
         """
         <div style="background-color:#d1e7dd; color:#0f5132; padding:15px; border-radius:8px; margin-bottom:20px; border:1px solid #badbcc; font-size:16px;">
             <strong>FULL MODE ACTIVE</strong><br>
-            API Key detected. Documents will be sent to Landing AI for actual extraction.
+            Documents will be sent to Landing AI for actual extraction. It requires API key at Landing AI.
         </div>
         """,
         unsafe_allow_html=True
@@ -152,6 +221,10 @@ if st.button("Extract", type="primary"):
         )
         st.markdown("---")
         st.markdown(sample_markdown)
+        st.stop()
+
+    if not api_key.strip():
+        st.error("Please enter your Landing AI API Key in the sidebar to perform a full extraction.")
         st.stop()
 
     doc_bytes: bytes | None = None
