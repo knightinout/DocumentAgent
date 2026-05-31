@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import tempfile
+import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -9,6 +10,8 @@ import streamlit as st
 import streamlit.components.v1 as components
 from dotenv import load_dotenv
 from landingai_ade import LandingAIADE
+
+import storage
 
 logging.basicConfig(
     filename="documentagent.log",
@@ -19,6 +22,10 @@ logging.basicConfig(
 load_dotenv()
 
 SUPPORTED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".pdf"}
+
+# Stable per-session UUID used as the S3 prefix for this browser session.
+if "session_id" not in st.session_state:
+    st.session_state.session_id = str(uuid.uuid4())
 
 st.set_page_config(page_title="DocumentAgent", layout="wide")
 
@@ -122,6 +129,18 @@ model = st.sidebar.selectbox(
         "dpt-2-latest (higher accuracy, 3 credits/page)"
         if m == "dpt-2-latest"
         else "dpt-2-mini (faster, 1.5 credits/page)"
+    ),
+)
+
+st.sidebar.markdown("### Storage")
+s3_env_enabled = storage.s3_enabled()
+s3_consent = st.sidebar.toggle(
+    "Save documents to S3",
+    value=s3_env_enabled,
+    help=(
+        "When enabled, uploaded documents and extracted outputs are saved "
+        "to your configured S3 bucket. Each session uses a unique prefix. "
+        "Requires S3_BUCKET_NAME and AWS_REGION in your .env."
     ),
 )
 
@@ -282,6 +301,20 @@ if st.button("Extract", type="primary"):
     )
     if response.metadata.failed_pages:
         logging.warning("Failed pages: %s", response.metadata.failed_pages)
+
+    # --- Optional S3 storage ---
+    if s3_consent:
+        try:
+            s3 = storage.build_backend(st.session_state.session_id)
+            doc_filename = (
+                uploaded_file.name if input_mode == "Upload" else sample_path.name
+            )
+            s3.upload_document(doc_bytes, doc_filename)
+            s3.upload_output(response.markdown, "extracted.md")
+            st.sidebar.success(f"Saved to S3 (session: {st.session_state.session_id[:8]}…)")
+        except RuntimeError as exc:
+            st.sidebar.warning(f"S3 storage skipped: {exc}")
+            logging.warning("S3 upload failed: %s", exc)
 
     # User-facing output
     meta = response.metadata
