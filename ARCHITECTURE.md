@@ -7,25 +7,78 @@
 ### Phase 1/2 — Cloud & Local (Dev / Demo)
 
 ```
-Input (image / PDF)
+User uploads document (PDF / image)
         │
         ▼
 ┌───────────────────────────────┐
-│    Streamlit Web App          │  Demo & integration layer
+│    Streamlit Web App          │  app.py — UI, routing, result display
 │  (Extraction Backend toggle)  │
 └──────────────┬────────────────┘
                │
-      ┌────────┴────────┐
-      │                 │
-      ▼                 ▼
- Cloud Path         Local Path
- (Landing AI        (Gemma 3 4B via
-  AIDE API)          LM Studio)
-      │                 │
-      └────────┬────────┘
+      ┌────────┴────────────────┐
+      │                         │
+      ▼                         ▼
+ Cloud Path                Local Path
+ (Landing AI               local_model.py
+  AIDE API)                LocalModelClient
+      │                         │
+      │                         │  PDF → pymupdf renders each page
+      │                         │        as PNG at 96 DPI
+      │                         │
+      │                         ▼
+      │                  LM Studio HTTP server
+      │                  localhost:1234/v1
+      │                  (OpenAI-compatible REST API)
+      │                         │
+      │                         ▼
+      │                  Gemma 3 4B (VLM variant)
+      │                  vision model — on device
+      │                  no data leaves the machine
+      │                         │
+      └────────┬────────────────┘
                ▼
       Structured Output
-      (Markdown / JSON)
+      (Markdown — text, tables, key-value pairs)
+               │
+               ▼
+      Two-column result display
+      (document preview │ extracted markdown)
+      Optional: download .md or save to S3
+```
+
+#### Local path — end-to-end call flow
+
+```
+app.py: write uploaded bytes → /tmp/tmp_upload<hash>.jpg
+    │
+    ▼
+LocalModelClient.parse(Path("/tmp/..."))
+    │
+    ├─ PDF?  → _parse_pdf()
+    │              fitz.open() → per-page PNG at 96 DPI
+    │              _call_vision() × N pages
+    │
+    └─ Image? → _parse_image()
+                   read bytes
+                   _call_vision() × 1
+                       │
+                       ▼
+               base64-encode PNG bytes
+               openai.chat.completions.create(
+                   model  = "google/gemma-3-4b"
+                   messages = [{ image_url, extraction_prompt }]
+                   temperature = 0.1
+                   max_tokens  = 2048
+                   timeout     = 120s
+               )
+               → POST localhost:1234/v1/chat/completions
+               ← response.choices[0].message.content
+    │
+    ▼
+LocalModelResponse(markdown, metadata{page_count, duration_ms})
+    │
+app.py: finally block — temp file deleted
+app.py: render result columns
 ```
 
 ### Phase 3 — Event-Driven Pipeline (Production)
