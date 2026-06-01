@@ -24,7 +24,7 @@ DocumentAgent addresses these gaps with a practical, privacy-conscious extractio
 
 DocumentAgent is a dual-mode agentic document extraction system:
 
-1. **Cloud path (Landing AI AIDE)**: Uses [Landing AI's AIDE API](https://landing.ai) for high-accuracy structured extraction from scanned or photographed documents — invoices, ledgers, ID documents, government forms.
+1. **Cloud path (Landing AI AIDE)**: Uses [Landing AI's AIDE API](https://app.landing.ai/) for high-accuracy structured extraction from scanned or photographed documents — invoices, ledgers, ID documents, government forms.
 
 2. **Local path (Gemma 3/4 quantized)**: A fully on-device pipeline using quantized Gemma 3 or Gemma 4 (4B–8B) models for users who cannot or will not send documents to external servers.
 
@@ -61,7 +61,8 @@ Planned work is tracked as GitHub Issues. See the [Issues tab](https://github.co
 ## Prerequisites
 
 - Python 3.10+
-- [Landing AI API key](https://landing.ai) — required for the cloud extraction path
+- [Landing AI API key](https://app.landing.ai/) — required for the cloud extraction path
+- AWS account — required for Phase 3 (S3, Lambda, Bedrock, Secrets Manager)
 
 ---
 
@@ -80,7 +81,7 @@ cd DocumentAgent
 cp .env.example .env
 ```
 
-Open `.env` and add your key (get one at [landing.ai](https://landing.ai)):
+Open `.env` and add your key (get one at [app.landing.ai](https://app.landing.ai/)):
 
 ```
 VISION_AGENT_API_KEY=your_key_here
@@ -124,6 +125,79 @@ A valid `VISION_AGENT_API_KEY` in your `.env` is required for the Landing AI cel
 > - Linux: `sudo apt install tesseract-ocr`
 > - macOS: `brew install tesseract`
 > - Windows: [UB-Mannheim installer](https://github.com/UB-Mannheim/tesseract/wiki)
+
+---
+
+## Phase 3 — AWS Production Setup
+
+> Use **us-east-1** or **us-west-2** — Bedrock is not available in all regions.
+
+Complete these steps in order:
+
+1. **Landing AI API key** — [app.landing.ai](https://app.landing.ai/)
+   Get your key, then store it in AWS Secrets Manager (step 3) rather than in `.env`.
+
+2. **S3 bucket** — [S3 Console](https://console.aws.amazon.com/s3/)
+   Create a bucket with Block Public Access ON and versioning enabled.
+   Attach `infra/iam_policy.json` (replace `YOUR_BUCKET_NAME`) to your app user/role.
+
+3. **Secrets Manager secret** — [Secrets Manager Console](https://console.aws.amazon.com/secretsmanager/)
+   Create a secret named `documentagent/landing-ai-key` with value:
+   ```json
+   {"VISION_AGENT_API_KEY": "your_key_here"}
+   ```
+
+4. **IAM role for Lambda** — [IAM Console](https://console.aws.amazon.com/iam/)
+   Create role `documentagent-lambda-role` and attach `infra/lambda_role_policy.json`
+   (replace the `YOUR_*` placeholders with your bucket name, region, account ID, and KB ID).
+
+5. **Lambda function** — [Lambda Console](https://console.aws.amazon.com/lambda/)
+   - Runtime: Python 3.12 | Memory: 1024 MB | Timeout: 5 min
+   - Handler: `handler.handler` | Source: `lambda/` directory
+   - Attach the role from step 4
+   - Set env vars: `AWS_REGION`, `BEDROCK_KB_ID`, `BEDROCK_DS_ID`, `LANDING_AI_SECRET_NAME`
+   - Add S3 trigger: event `ObjectCreated`, prefix filter `*/input/`
+
+6. **Bedrock model access** — [Bedrock Model Access](https://console.aws.amazon.com/bedrock/home#/modelaccess)
+   Request access to:
+   - `Amazon Titan Embeddings v2` (for KB indexing)
+   - `Anthropic Claude 3.5 Sonnet` (for the Strands Agent)
+
+7. **Bedrock Knowledge Base** — [Bedrock Knowledge Bases](https://console.aws.amazon.com/bedrock/home#/knowledge-bases)
+   - Data source: S3, prefix `*/output/*`
+   - Embedding model: `amazon.titan-embed-text-v2:0`
+   - Chunking: Semantic
+   - Attach `infra/bedrock_kb_role_policy.json` as the KB service role
+   - After creation, copy **Knowledge Base ID** and **Data Source ID** into `.env`:
+     ```
+     BEDROCK_KB_ID=...
+     BEDROCK_DS_ID=...
+     ```
+
+Once set up, run the Strands Agent to query extracted documents:
+
+```bash
+python agent.py "What is the total amount on the invoice?"
+# or interactive:
+python agent.py
+```
+
+**Verify S3 uploads** — after extracting a document with the S3 toggle enabled, confirm the input and output files landed in the bucket:
+
+```bash
+# Source credentials from .env, then list all objects
+set -a && source .env && set +a && aws s3 ls s3://your-bucket-name/ --recursive
+```
+
+Expected output:
+```
+<timestamp>   <size>  <session-uuid>/input/<filename>
+<timestamp>   <size>  <session-uuid>/output/extracted.md
+```
+
+The `output/extracted.md` file is written by Lambda after calling ADE — its presence confirms the full S3 → Lambda → ADE pipeline ran successfully.
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the full pipeline diagram and IAM policy details.
 
 ---
 
