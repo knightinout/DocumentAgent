@@ -63,7 +63,7 @@ class LocalModelClient:
         )
         self._base_url = resolved_base
         self._model = resolved_model
-        self._client = OpenAI(base_url=resolved_base, api_key="lm-studio")
+        self._client = OpenAI(base_url=resolved_base, api_key="lm-studio", timeout=120.0)
 
     def parse(self, document: Path, model: str | None = None) -> LocalModelResponse:
         """Extract text, tables, and key-value pairs from a document.
@@ -123,8 +123,8 @@ class LocalModelClient:
         try:
             for page_num in range(len(doc)):
                 page = doc.load_page(page_num)
-                # Render at 150 DPI — good balance between quality and token cost.
-                mat = fitz.Matrix(150 / 72, 150 / 72)
+                # Render at 96 DPI — reduced for CPU inference (lower memory + token cost).
+                mat = fitz.Matrix(96 / 72, 96 / 72)
                 pix = page.get_pixmap(matrix=mat)
                 img_bytes = pix.tobytes("png")
                 page_md = self._call_vision(img_bytes, "image/png", model)
@@ -167,6 +167,7 @@ class LocalModelClient:
                     }
                 ],
                 temperature=0.1,
+                max_tokens=2048,
             )
         except Exception as exc:
             exc_type = type(exc).__name__

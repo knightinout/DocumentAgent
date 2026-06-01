@@ -56,6 +56,32 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the full diagram, technical stack, pr
 
 Planned work is tracked as GitHub Issues. See the [Issues tab](https://github.com/knightinout/DocumentAgent/issues) for the full backlog, organised by phase label (`phase1-web-ui-mvp`, `phase2-local-documentagent`, `phase3-production-deploy`).
 
+### V1 — Document Extraction (current)
+
+Upload any document (PDF, image) and get clean structured Markdown output. Runs fully locally via Gemma 3 4B on LM Studio — no data leaves the device.
+
+### V2 — Privacy-First Form Fill from Multiple ID Documents
+
+**Goal:** User uploads multiple identity documents; the app extracts fields from each and auto-fills a target form, producing a ready-to-submit output — without any document leaving the machine.
+
+**Primary use case — Lease Agreement (India):**
+
+1. User uploads **Aadhaar card** and **driving licence** (tenant + landlord)
+2. Local model extracts: name, address, DOB, ID numbers from each document
+3. App maps extracted fields onto a **standard lease agreement template**
+4. User reviews the pre-filled form and confirms
+5. With consent, the **signature extracted from the ID document** is placed on the agreement
+6. Final signed PDF is generated — ready for submission at the sub-registrar office
+
+**Why local model matters here:** ID documents contain PAN, Aadhaar, address, photo, and signature. Running inference locally ensures this data is never transmitted to any external server. Privacy is not a feature — it is the architecture.
+
+**Planned UI additions for V2:**
+- Multi-file upload panel (drag multiple documents at once)
+- Field extraction review table (editable before form fill)
+- Form template selector (lease, rent receipt, affidavit, etc.)
+- Signature placement preview with consent checkbox
+- Final PDF download
+
 ---
 
 ## Prerequisites
