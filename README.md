@@ -132,49 +132,23 @@ A valid `VISION_AGENT_API_KEY` in your `.env` is required for the Landing AI cel
 
 > Use **us-east-1** or **us-west-2** — Bedrock is not available in all regions.
 
-Complete these steps in order:
+### Automated setup (recommended)
 
-1. **Landing AI API key** — [app.landing.ai](https://app.landing.ai/)
-   Get your key, then store it in AWS Secrets Manager (step 3) rather than in `.env`.
+All AWS resources are created by a single script — no console required:
 
-2. **S3 bucket** — [S3 Console](https://console.aws.amazon.com/s3/)
-   Create a bucket with Block Public Access ON and versioning enabled.
-   Attach `infra/iam_policy.json` (replace `YOUR_BUCKET_NAME`) to your app user/role.
+```bash
+cp .env.example .env   # add VISION_AGENT_API_KEY + AWS_ACCESS_KEY_ID/SECRET
+source .venv/bin/activate
+pip install -r requirements.txt
+python scripts/check_bedrock.py   # confirm model access before proceeding
+python scripts/setup_aws.py       # creates all 7 resources, writes IDs to .env
+```
 
-3. **Secrets Manager secret** — [Secrets Manager Console](https://console.aws.amazon.com/secretsmanager/)
-   Create a secret named `documentagent/landing-ai-key` with value:
-   ```json
-   {"VISION_AGENT_API_KEY": "your_key_here"}
-   ```
+The script creates: S3 bucket, Secrets Manager secret, IAM roles, Lambda function,
+S3 event trigger, OpenSearch Serverless collection + vector index, and Bedrock
+Knowledge Base. It is idempotent — safe to re-run if interrupted.
 
-4. **IAM role for Lambda** — [IAM Console](https://console.aws.amazon.com/iam/)
-   Create role `documentagent-lambda-role` and attach `infra/lambda_role_policy.json`
-   (replace the `YOUR_*` placeholders with your bucket name, region, account ID, and KB ID).
-
-5. **Lambda function** — [Lambda Console](https://console.aws.amazon.com/lambda/)
-   - Runtime: Python 3.12 | Memory: 1024 MB | Timeout: 5 min
-   - Handler: `handler.handler` | Source: `lambda/` directory
-   - Attach the role from step 4
-   - Set env vars: `AWS_REGION`, `BEDROCK_KB_ID`, `BEDROCK_DS_ID`, `LANDING_AI_SECRET_NAME`
-   - Add S3 trigger: event `ObjectCreated`, prefix filter `*/input/`
-
-6. **Bedrock model access** — [Bedrock Model Access](https://console.aws.amazon.com/bedrock/home#/modelaccess)
-   Request access to:
-   - `Amazon Titan Embeddings v2` (for KB indexing)
-   - `Anthropic Claude 3.5 Sonnet` (for the Strands Agent)
-
-7. **Bedrock Knowledge Base** — [Bedrock Knowledge Bases](https://console.aws.amazon.com/bedrock/home#/knowledge-bases)
-   - Data source: S3, prefix `*/output/*`
-   - Embedding model: `amazon.titan-embed-text-v2:0`
-   - Chunking: Semantic
-   - Attach `infra/bedrock_kb_role_policy.json` as the KB service role
-   - After creation, copy **Knowledge Base ID** and **Data Source ID** into `.env`:
-     ```
-     BEDROCK_KB_ID=...
-     BEDROCK_DS_ID=...
-     ```
-
-Once set up, run the Strands Agent to query extracted documents:
+### Query documents with the Strands Agent
 
 ```bash
 python agent.py "What is the total amount on the invoice?"
@@ -182,7 +156,9 @@ python agent.py "What is the total amount on the invoice?"
 python agent.py
 ```
 
-**Verify S3 uploads** — after extracting a document with the S3 toggle enabled, confirm the input and output files landed in the bucket:
+### Verify S3 uploads
+
+After extracting a document with the **Save to S3** toggle enabled in the sidebar:
 
 ```bash
 # Source credentials from .env, then list all objects
@@ -195,9 +171,29 @@ Expected output:
 <timestamp>   <size>  <session-uuid>/output/extracted.md
 ```
 
-The `output/extracted.md` file is written by Lambda after calling ADE — its presence confirms the full S3 → Lambda → ADE pipeline ran successfully.
+The `output/extracted.md` file is written by Lambda after calling ADE — its presence confirms the full S3 → Lambda → ADE → Bedrock KB pipeline ran successfully.
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the full pipeline diagram and IAM policy details.
+### Agent model options
+
+| Stage | Set `BEDROCK_MODEL_ID` in `.env` | Notes |
+|---|---|---|
+| Testing (default) | `amazon.nova-lite-v1:0` | No Anthropic payment gate, ~$0.003/10 queries |
+| Pre-demo | `anthropic.claude-haiku-4-5-20251001-v1:0` | Fast, high quality, ~$0.05/10 queries |
+| Demo | `us.anthropic.claude-sonnet-4-5-20250929-v1:0` | Best accuracy, ~$0.17/10 queries |
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the full pipeline diagram, cost breakdown, and IAM policy details.
+
+---
+
+## Running Tests
+
+```bash
+source .venv/bin/activate
+pip install pytest pytest-cov
+pytest tests/ -v --cov=storage --cov=handler --cov-report=term-missing
+```
+
+Current coverage: **100%** on `storage.py` and `lambda/handler.py` (39 tests, all mocked — no AWS credentials needed).
 
 ---
 

@@ -104,30 +104,49 @@ BEDROCK_MODEL_ID=anthropic.claude-haiku-4-5-20251001-v1:0
 | Serverless Compute | AWS Lambda — `lambda/handler.py` |
 | Permissions | AWS IAM — `infra/` |
 | Secrets | AWS Secrets Manager |
+| AOSS REST signing | `requests-aws4auth` (SigV4 for OpenSearch Serverless) |
 | Vector Knowledge Base | AWS Bedrock Knowledge Base + OpenSearch Serverless |
 | Agent Framework | Strands Agents — `agent.py` |
-| Foundation Model | Amazon Bedrock (Claude 3.5 Sonnet) |
+| Default Agent Model | `amazon.nova-lite-v1:0` (AWS-native, no payment gate) |
 | Language | Python 3.10+ |
+| Tests | pytest + pytest-cov (`tests/`) — 100% coverage on `storage.py` and `lambda/handler.py` |
 
 ---
 
-## AWS Setup — What to Create
+## AWS Setup — Automated Script (Recommended)
+
+All 7 resources are created in a single script — no console clicking required:
+
+```bash
+cp .env.example .env          # fill in VISION_AGENT_API_KEY + AWS credentials
+source .venv/bin/activate
+pip install -r requirements.txt
+python scripts/setup_aws.py   # creates everything, writes KB/DS IDs back to .env
+```
+
+The script is idempotent — re-running it skips resources that already exist.
+
+**Before running**, verify your Bedrock model is reachable:
+```bash
+python scripts/check_bedrock.py
+# APPROVED — amazon.nova-lite-v1:0 is reachable. Run: python scripts/setup_aws.py
+```
+
+### What the script creates
 
 Use **us-east-1** or **us-west-2** (Bedrock is not available in all regions).
 
-| # | Resource | Console Link | Notes |
-|---|---|---|---|
-| 1 | Landing AI API key | [app.landing.ai](https://app.landing.ai/) | Store in Secrets Manager, not .env |
-| 2 | S3 bucket | [S3 Console](https://console.aws.amazon.com/s3/) | Block all public access; versioning ON |
-| 3 | Secrets Manager secret | [Secrets Manager Console](https://console.aws.amazon.com/secretsmanager/) | Name: `documentagent/landing-ai-key` |
-| 4 | IAM role for Lambda | [IAM Console](https://console.aws.amazon.com/iam/) | Attach `infra/lambda_role_policy.json` |
-| 5 | Lambda function | [Lambda Console](https://console.aws.amazon.com/lambda/) | Runtime Python 3.12, 1 GB RAM, 5 min timeout |
-| 6 | S3 event notification | S3 → bucket → Properties → Event notifications | Trigger: `ObjectCreated`, prefix `*/input/` → Lambda |
-| 7 | Bedrock model access | [Bedrock Model Access](https://console.aws.amazon.com/bedrock/home#/modelaccess) | Enable Titan Embed v2 + Claude 3.5 Sonnet |
-| 8 | Bedrock Knowledge Base | [Bedrock Knowledge Bases](https://console.aws.amazon.com/bedrock/home#/knowledge-bases) | Data source: S3 `*/output/*`; attach `infra/bedrock_kb_role_policy.json` |
-| 9 | IAM role for Bedrock KB | [IAM Console](https://console.aws.amazon.com/iam/) | Attach `infra/bedrock_kb_role_policy.json` |
+| # | Resource | Notes |
+|---|---|---|
+| 1 | S3 bucket | Versioning ON, public access blocked |
+| 2 | Secrets Manager secret | `documentagent/landing-ai-key` — Landing AI key stored as JSON |
+| 3 | IAM roles | Lambda execution role + Bedrock KB service role with least-privilege policies |
+| 4 | Lambda function | `documentagent-ade-processor` — Python 3.12, 1 GB RAM, 5 min timeout |
+| 5 | S3 event notification | ObjectCreated on bucket → Lambda (handler filters `*/input/*` keys) |
+| 6 | Bedrock model check | Test-invokes `BEDROCK_MODEL_ID` to confirm access before KB creation |
+| 7 | OpenSearch Serverless + Bedrock KB | AOSS collection, vector index (dim=1024, faiss/hnsw), KB, S3 data source |
 
-After creating the KB, copy **Knowledge Base ID** and **Data Source ID** into `.env` as `BEDROCK_KB_ID` and `BEDROCK_DS_ID`.
+After completion, `BEDROCK_KB_ID` and `BEDROCK_DS_ID` are written back to `.env` automatically.
 
 ---
 
