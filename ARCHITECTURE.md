@@ -4,31 +4,62 @@
 
 ## Architecture Diagram
 
+### Phase 1/2 — Cloud & Local (Dev / Demo)
+
 ```
 Input (image / PDF)
         │
         ▼
 ┌───────────────────────────────┐
-│    Streamlit Web App / API    │  ← Demo & integration layer
+│    Streamlit Web App          │  Demo & integration layer
+│  (Extraction Backend toggle)  │
 └──────────────┬────────────────┘
                │
       ┌────────┴────────┐
       │                 │
       ▼                 ▼
  Cloud Path         Local Path
- (Landing AI        (Gemma 3/4
-  AIDE API)          quantized)
+ (Landing AI        (Gemma 3 4B via
+  AIDE API)          LM Studio)
       │                 │
       └────────┬────────┘
                ▼
       Structured Output
-      (JSON / table / form)
-               │
-      ┌────────▼────────┐
-      │   AWS Backend   │  ← Production deployment
-      │  S3 / Lambda /  │
-      │ Bedrock / Strands│
-      └─────────────────┘
+      (Markdown / JSON)
+```
+
+### Phase 3 — Event-Driven Pipeline (Production)
+
+```
+User / Streamlit App
+        │
+        │ upload doc (PDF/image)
+        ▼
+┌───────────────────┐
+│   AWS S3 Bucket   │  {uuid}/input/{filename}
+│  (input prefix)   │
+└────────┬──────────┘
+         │ S3 ObjectCreated event
+         ▼
+┌───────────────────┐
+│   AWS Lambda      │  documentagent-ade-processor
+│  (handler.py)     │  • fetches Landing AI key from Secrets Manager
+│                   │  • calls Landing AI ADE API
+│                   │  • writes markdown → {uuid}/output/extracted.md
+└────────┬──────────┘
+         │ StartIngestionJob
+         ▼
+┌───────────────────┐
+│ Bedrock Knowledge │  data source: S3 */output/*
+│ Base + OpenSearch │  embedding: amazon.titan-embed-text-v2:0
+│ Serverless        │
+└────────┬──────────┘
+         │ retrieve()
+         ▼
+┌───────────────────┐
+│  Strands Agent    │  agent.py — interactive CLI
+│  (Claude 3.5)     │  query_documents tool → KB retrieval
+└───────────────────┘
 ```
 
 ---
@@ -37,18 +68,51 @@ Input (image / PDF)
 
 | Layer | Technology |
 |---|---|
-| Document Extraction API | Landing AI AIDE (LandingAI Platform) |
+| Document Extraction API | Landing AI AIDE (`landingai-ade`) |
 | OCR Baseline | Tesseract, PaddleOCR |
-| Document Understanding | LayoutLM, LayoutReader |
-| Local Vision Model | Gemma 3 / Gemma 4 (4B–8B, quantized GGUF) |
-| Local Inference Runtime | Ollama, llama.cpp |
-| Demo Interface | Streamlit, Jupyter Notebook |
-| Cloud Storage | AWS S3 (boto3) |
-| Serverless Compute | AWS Lambda |
-| Permissions | AWS IAM |
-| Foundation Model Cloud | AWS Bedrock (bedrock-agentcore) |
-| Agent Framework | Strands Agents (strands-agents) |
+| Local Vision Model | Gemma 3 4B (VLM variant, Q4_K_M GGUF) — **confirmed working** |
+| Local Inference Runtime | **LM Studio** (OpenAI-compatible REST server, port 1234) |
+| Local Client | `local_model.py` — `LocalModelClient` wraps `openai` SDK |
+| Demo Interface | Streamlit (`app.py`), Jupyter Notebook |
+| Cloud Storage | AWS S3 (boto3) — `storage.py` |
+| Serverless Compute | AWS Lambda — `lambda/handler.py` |
+| Permissions | AWS IAM — `infra/` |
+| Secrets | AWS Secrets Manager |
+| AOSS REST signing | `requests-aws4auth` (SigV4 for OpenSearch Serverless) |
+| Vector Knowledge Base | AWS Bedrock Knowledge Base + OpenSearch Serverless |
+| Agent Framework | Strands Agents — `agent.py` |
+| Default Agent Model | `amazon.nova-lite-v1:0` (AWS-native, no payment gate) |
 | Language | Python 3.10+ |
+| Tests | pytest + pytest-cov (`tests/`) |
+
+---
+
+## Benchmark: Cloud vs Local
+
+See [`benchmarks/results.md`](benchmarks/results.md) for the full Phase 2 benchmark
+comparing Landing AI AIDE vs Gemma 3 4B on 20+ Indian documents.
+
+**Recommendation:** Use **cloud (AIDE)** for accuracy-critical extraction; use **Local
+(Gemma 3 4B via LM Studio)** when documents must not leave the machine (Aadhaar, PAN,
+sensitive financial records).
+
+---
+
+## Phase 3 — Strands Agent Model Selection
+
+The Strands Agent only performs **Q&A on already-extracted markdown** — the generative
+model never sees raw images. Choose based on stage:
+
+| Stage | Model (`BEDROCK_MODEL_ID`) | Est. cost / 10 queries | Notes |
+|---|---|---|---|
+| Testing | `amazon.nova-lite-v1:0` ← **default** | ~$0.003 | AWS-native, no Anthropic payment gate |
+| Pre-demo | `anthropic.claude-haiku-4-5-20251001-v1:0` | ~$0.05 | Fast, excellent quality |
+| Demo | `us.anthropic.claude-sonnet-4-5-20250929-v1:0` | ~$0.17 | Best accuracy for nuanced Q&A |
+
+To switch models at any time — no code changes needed, just update `.env`:
+```
+BEDROCK_MODEL_ID=anthropic.claude-haiku-4-5-20251001-v1:0
+```
 
 ---
 
@@ -56,28 +120,19 @@ Input (image / PDF)
 
 | Path | Where documents go | Recommendation |
 |---|---|---|
-| Cloud (Landing AI / AWS) | Sent to external servers | Suitable for non-sensitive business documents |
-| Local (Gemma) | Never leave the device | Recommended for Aadhaar, PAN, financial records |
+| Cloud (Landing AI) | Sent to Landing AI servers during extraction | Suitable for non-sensitive business documents |
+| Local (Gemma 3 4B) | Processed on-device — no external API calls during inference | Use for Aadhaar, PAN, financial records |
 
-- The UI clearly indicates which path is active before a document is submitted.
-- No document storage by default; opt-in logging only.
-- Local mode is fully air-gapped — no network calls after model download.
-
----
-
-## Access & Pricing Model
-
-| Tier | Free | Paid |
-|---|---|---|
-| Web Demo (Dev) | UI exploration, preview video | Actual agent extraction (requires Landing AI API key) |
-| Local Mode | Full extraction on own hardware | — |
-| Production API | — | Per-document pricing (TBD) |
+- Landing AI API key stored in Secrets Manager for the Lambda path — never in env vars as plaintext.
+- No document storage by default; opt-in S3 toggle in the Streamlit sidebar.
+- Local mode: LM Studio requires a one-time model download (~2.5 GB). After that, no network calls during inference.
 
 ---
 
 ## Prerequisites
 
 - Python 3.10+
-- [Landing AI API key](https://landing.ai) — required for the cloud extraction path
-- AWS credentials — required for production deployment (S3, Lambda, Bedrock)
-- GPU-capable machine recommended for local models (8 GB VRAM minimum for 4B quantized; 16 GB for 8B)
+- [Landing AI API key](https://app.landing.ai/) — required for cloud extraction
+- AWS account with access to S3, Lambda, Bedrock, Secrets Manager — required for Phase 3
+- [LM Studio](https://lmstudio.ai) with `gemma-3-4b-instruct` VLM variant — required for local extraction
+- GPU recommended for local models (8 GB VRAM for 4B; 16 GB for 8B). CPU inference works but is slow.
