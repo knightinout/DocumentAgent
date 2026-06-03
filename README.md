@@ -3,7 +3,7 @@
 **Agentic Document & Form Extraction for India's Tier 2/3 Cities**
 
 ![Build Status](https://img.shields.io/badge/build-passing-brightgreen)
-![License](https://img.shields.io/badge/license-TBD-blue)
+![License](https://img.shields.io/badge/license-MIT-blue)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 
 ---
@@ -24,7 +24,7 @@ DocumentAgent addresses these gaps with a practical, privacy-conscious extractio
 
 DocumentAgent is a dual-mode agentic document extraction system:
 
-1. **Cloud path (Landing AI AIDE)**: Uses [Landing AI's AIDE API](https://landing.ai) for high-accuracy structured extraction from scanned or photographed documents — invoices, ledgers, ID documents, government forms.
+1. **Cloud path (Landing AI AIDE)**: Uses [Landing AI's AIDE API](https://app.landing.ai/) for high-accuracy structured extraction from scanned or photographed documents — invoices, ledgers, ID documents, government forms.
 
 2. **Local path (Gemma 3 4B via LM Studio)**: An on-device pipeline using Gemma 3 4B (VLM variant) served by [LM Studio](https://lmstudio.ai) for users who prefer not to send documents to external servers. No external API calls during inference.
 
@@ -40,7 +40,7 @@ DocumentAgent is a dual-mode agentic document extraction system:
 - Interactive **Streamlit web demo** and **Jupyter notebook** for feasibility testing
 - **AWS-hosted production backend**: S3, Lambda, Bedrock, Strands Agents
 - **Privacy controls**: choose between cloud processing or fully local inference — no documents sent to external servers in local mode
-- No document storage by default — opt-in logging only
+- No document storage by default — opt-in S3 toggle only
 
 ---
 
@@ -86,8 +86,19 @@ Upload any document (PDF, image) and get clean structured Markdown output. Runs 
 
 ## Prerequisites
 
+**All paths:**
 - Python 3.10+
-- [Landing AI API key](https://landing.ai) — required for the cloud extraction path
+
+**Cloud extraction (Phase 1):**
+- [Landing AI API key](https://app.landing.ai/) — free tier available
+
+**Local extraction (Phase 2):**
+- [LM Studio](https://lmstudio.ai) with `gemma-3-4b-instruct` VLM variant (~2.5 GB)
+- GPU recommended (8 GB VRAM+); CPU inference works but is slow
+
+**AWS production backend (Phase 3):**
+- AWS account with access to S3, Lambda, Bedrock, and Secrets Manager
+- Use **us-east-1** or **us-west-2** — Bedrock is not available in all regions
 
 ---
 
@@ -106,7 +117,7 @@ cd DocumentAgent
 cp .env.example .env
 ```
 
-Open `.env` and add your key (get one at [landing.ai](https://landing.ai)):
+Open `.env` and add your key (get one at [app.landing.ai](https://app.landing.ai/)):
 
 ```
 VISION_AGENT_API_KEY=your_key_here
@@ -181,8 +192,6 @@ A valid `VISION_AGENT_API_KEY` in your `.env` is required for the Landing AI cel
 
 ## Phase 3 — AWS Production Setup
 
-> Use **us-east-1** or **us-west-2** — Bedrock is not available in all regions.
-
 ### Automated setup (recommended)
 
 All AWS resources are created by a single script — no console required:
@@ -244,15 +253,15 @@ Contributions are welcome. Please open an issue to discuss proposed changes befo
 
 ## License
 
-License to be decided — Apache 2.0 or MIT. See `LICENSE` for details once finalized.
+MIT — see [LICENSE](LICENSE).
 
 ---
 
 ## References
 
-- [Landing AI AIDE Documentation](#) *(link to be added)*
+- [Landing AI AIDE](https://app.landing.ai/)
 - [Strands Agents](https://github.com/strands-agents/strands-agents)
-- [AWS Bedrock AgentCore](https://aws.amazon.com/bedrock/)
+- [AWS Bedrock](https://aws.amazon.com/bedrock/)
 - [Gemma Model Family](https://ai.google.dev/gemma)
 - [LM Studio](https://lmstudio.ai)
 - [Streamlit](https://streamlit.io)
