@@ -3,7 +3,7 @@
 **Agentic Document & Form Extraction for India's Tier 2/3 Cities**
 
 ![Build Status](https://img.shields.io/badge/build-passing-brightgreen)
-![License](https://img.shields.io/badge/license-MIT-blue)
+![License](https://img.shields.io/badge/license-TBD-blue)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 
 ---
@@ -24,7 +24,7 @@ DocumentAgent addresses these gaps with a practical, privacy-conscious extractio
 
 DocumentAgent is a dual-mode agentic document extraction system:
 
-1. **Cloud path (Landing AI AIDE)**: Uses [Landing AI's AIDE API](https://app.landing.ai/) for high-accuracy structured extraction from scanned or photographed documents — invoices, ledgers, ID documents, government forms.
+1. **Cloud path (Landing AI AIDE)**: Uses [Landing AI's AIDE API](https://va.landing.ai/) for high-accuracy structured extraction from scanned or photographed documents — invoices, ledgers, ID documents, government forms.
 
 2. **Local path (Gemma 3 4B via LM Studio)**: An on-device pipeline using Gemma 3 4B (VLM variant) served by [LM Studio](https://lmstudio.ai) for users who prefer not to send documents to external servers. No external API calls during inference.
 
@@ -90,7 +90,7 @@ Upload any document (PDF, image) and get clean structured Markdown output. Runs 
 - Python 3.10+
 
 **Cloud extraction (Phase 1):**
-- [Landing AI API key](https://app.landing.ai/) — free tier available
+- [Landing AI API key](https://va.landing.ai/) — free tier available
 
 **Local extraction (Phase 2):**
 - [LM Studio](https://lmstudio.ai) with `gemma-3-4b-instruct` VLM variant (~2.5 GB)
@@ -117,7 +117,7 @@ cd DocumentAgent
 cp .env.example .env
 ```
 
-Open `.env` and add your key (get one at [app.landing.ai](https://app.landing.ai/)):
+Open `.env` and add your key (get one at [va.landing.ai](https://va.landing.ai/)):
 
 ```
 VISION_AGENT_API_KEY=your_key_here
@@ -253,13 +253,13 @@ Contributions are welcome. Please open an issue to discuss proposed changes befo
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+License to be decided. See [LICENSE](LICENSE) once finalised.
 
 ---
 
 ## References
 
-- [Landing AI AIDE](https://app.landing.ai/)
+- [Landing AI AIDE](https://va.landing.ai/)
 - [Strands Agents](https://github.com/strands-agents/strands-agents)
 - [AWS Bedrock](https://aws.amazon.com/bedrock/)
 - [Gemma Model Family](https://ai.google.dev/gemma)
