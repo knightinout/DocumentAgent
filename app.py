@@ -1,5 +1,6 @@
 import json
 import logging
+import logging.handlers
 import os
 import tempfile
 import uuid
@@ -12,11 +13,11 @@ from landingai_ade import LandingAIADE
 import storage
 from local_model import LocalModelClient
 
-logging.basicConfig(
-    filename="documentagent.log",
-    level=logging.DEBUG,
-    format="%(asctime)s %(levelname)s %(message)s",
+_log_handler = logging.handlers.RotatingFileHandler(
+    "documentagent.log", maxBytes=10 * 1024 * 1024, backupCount=3
 )
+_log_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+logging.basicConfig(level=logging.DEBUG, handlers=[_log_handler])
 
 load_dotenv()
 

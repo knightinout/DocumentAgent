@@ -5,6 +5,6 @@ __pycache__/
 *.pyo
 .streamlit/secrets.toml
 tmp_upload.*
-documentagent.log
+documentagent.log*
 outputs/
 .aider*
