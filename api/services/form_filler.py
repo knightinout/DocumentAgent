@@ -8,18 +8,32 @@ Aadhaar numbers are masked in all output (XXXX XXXX XXXX).
 
 Supported templates
 -------------------
-lease_agreement   — residential lease / rent agreement
-rent_receipt      — monthly rent receipt
-dl_renewal        — driving licence renewal application
-affidavit         — general affidavit
-bank_account      — bank account opening form
+Admin / identity (use_case: admin)
+  lease_agreement        — residential lease / rent agreement
+  rent_receipt           — monthly rent receipt
+  dl_renewal             — driving licence renewal application
+  affidavit              — general affidavit
+  bank_account           — bank account opening form
+
+Grading (use_case: grading)
+  cbse_marksheet         — CBSE Class 10/12 mark sheet
+  icse_marksheet         — ICSE mark sheet
+  school_progress_report — school term progress report
+  admit_card_verification — admit card field extraction for verification
 
 Source documents
 ----------------
-aadhaar     — Aadhaar card (front + back)
-pan         — PAN card
-dl          — Driving Licence
-voter_id    — Voter ID (EPIC)
+Student documents (grading):
+  admit_card             — student admit card
+  roll_number_sheet      — class roll number sheet
+  answer_booklet         — answer booklet page(s)
+  cbse_marksheet         — CBSE mark sheet (source)
+
+Identity documents (admin):
+  aadhaar     — Aadhaar card (front + back)
+  pan         — PAN card
+  dl          — Driving Licence
+  voter_id    — Voter ID (EPIC)
 """
 
 import json
@@ -35,26 +49,75 @@ logger = logging.getLogger(__name__)
 # Template definitions
 # ---------------------------------------------------------------------------
 
-_TEMPLATES: dict[str, dict[str, list[str]]] = {
+_TEMPLATES: dict[str, dict] = {
+    # ── Admin / identity ──────────────────────────────────────────────────
     "lease_agreement": {
         "required": ["tenant_name", "landlord_name", "property_address", "monthly_rent"],
         "optional": ["start_date", "duration_months", "security_deposit"],
+        "use_case": "admin",
     },
     "rent_receipt": {
         "required": ["tenant_name", "landlord_name", "amount", "month"],
         "optional": ["property_address", "receipt_number", "payment_mode"],
+        "use_case": "admin",
     },
     "dl_renewal": {
         "required": ["applicant_name", "dl_number", "dob", "address"],
         "optional": ["vehicle_class", "blood_group", "expiry_date"],
+        "use_case": "admin",
     },
     "affidavit": {
         "required": ["deponent_name", "statement", "date"],
         "optional": ["deponent_address", "notary_name"],
+        "use_case": "admin",
     },
     "bank_account": {
         "required": ["applicant_name", "dob", "address", "pan_number"],
         "optional": ["occupation", "annual_income", "nominee_name"],
+        "use_case": "admin",
+    },
+    # ── Grading ───────────────────────────────────────────────────────────
+    "cbse_marksheet": {
+        "required": [
+            "student_name", "roll_number", "school_name",
+            "class_grade", "english_marks", "hindi_marks",
+            "mathematics_marks", "science_marks", "social_science_marks",
+            "total_marks", "percentage",
+        ],
+        "optional": ["dob", "exam_year", "grade", "result", "school_code"],
+        "use_case": "grading",
+    },
+    "icse_marksheet": {
+        "required": [
+            "student_name", "roll_number", "school_name",
+            "class_grade", "english_marks", "total_marks", "percentage",
+        ],
+        "optional": [
+            "dob", "exam_year", "grade", "result",
+            "second_language_marks", "history_civics_marks",
+            "geography_marks", "mathematics_marks", "science_marks",
+        ],
+        "use_case": "grading",
+    },
+    "school_progress_report": {
+        "required": [
+            "student_name", "roll_number", "class_section",
+            "term", "academic_year", "total_marks", "percentage", "rank",
+        ],
+        "optional": [
+            "teacher_remarks", "attendance_percentage",
+            "english_marks", "hindi_marks", "mathematics_marks",
+            "science_marks", "social_science_marks",
+        ],
+        "use_case": "grading",
+    },
+    "admit_card_verification": {
+        "required": [
+            "student_name", "roll_number", "dob",
+            "exam_name", "exam_date", "exam_centre",
+        ],
+        "optional": ["father_name", "mother_name", "school_name", "class_grade"],
+        "use_case": "grading",
     },
 }
 
@@ -143,6 +206,7 @@ def fill(
     use_local: bool = True,
     api_key: str | None = None,
     model: str = "dpt-2-mini",
+    answer_key: dict | None = None,
 ) -> FormFillResult:
     """Run the two-stage form-fill pipeline.
 
@@ -152,6 +216,8 @@ def fill(
         use_local:   Use local LM Studio backend for stage-1 extraction.
         api_key:     Required when ``use_local=False``.
         model:       ADE model variant (cloud only).
+        answer_key:  Optional dict ``{field: expected_value}`` for grading templates.
+                     When supplied, missing required fields are compared against the key.
 
     Returns:
         :class:`FormFillResult` with extracted fields, sources, and missing fields.
@@ -230,6 +296,7 @@ def list_templates() -> list[dict]:
             "template_id": tid,
             "required_fields": tmpl["required"],
             "optional_fields": tmpl["optional"],
+            "use_case": tmpl.get("use_case", "admin"),
         }
         for tid, tmpl in _TEMPLATES.items()
     ]

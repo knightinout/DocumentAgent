@@ -7,10 +7,14 @@ Run alongside the Streamlit UI:
 
 Endpoints
 ---------
-GET  /api/v1/health          — readiness probe
-POST /api/v1/extract         — document → markdown (local or cloud)
-POST /api/v1/forms/fill      — documents + template → structured fields
-GET  /api/v1/forms/templates — list available form templates
+GET  /api/v1/health                          — readiness probe
+POST /api/v1/extract                         — document → markdown (local or cloud)
+POST /api/v1/forms/fill                      — documents + template → structured fields
+GET  /api/v1/forms/templates                 — list available form templates
+POST /api/v1/grade/extract                   — extract + keyword-match answer sheet
+GET  /api/v1/grade/rubrics                   — list grading rubrics
+GET  /api/v1/grade/rubrics/{id}              — rubric detail
+POST /api/v1/grade/rubrics/{id}/evaluate     — extract + score against rubric
 
 Privacy guarantee
 -----------------
@@ -27,7 +31,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.middleware.request_id import RequestIDMiddleware
-from api.routers import extract, forms, health
+from api.routers import extract, forms, grade, health
 
 logging.basicConfig(
     level=logging.INFO,
@@ -92,6 +96,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router, prefix=prefix)
     app.include_router(extract.router, prefix=prefix)
     app.include_router(forms.router, prefix=prefix)
+    app.include_router(grade.router, prefix=prefix)
 
     return app
 
