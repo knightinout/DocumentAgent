@@ -1,0 +1,100 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "feat/**", "fix/**", "docs/**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends \
+            tesseract-ocr \
+            tesseract-ocr-hin \
+            libmupdf-dev
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt pytest-anyio pytest-cov
+
+      - name: Run API tests
+        run: |
+          python3 -m pytest tests/api/ \
+            -v \
+            --cov=api \
+            --cov-report=xml \
+            --cov-report=term-missing
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        if: matrix.python-version == '3.12'
+        with:
+          files: coverage.xml
+          fail_ci_if_error: false
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install linters
+        run: pip install ruff
+      - name: Ruff check
+        run: ruff check api/ scripts/ benchmarks/ --select E,F,W,I --ignore E501
+
+  grading-eval-ci:
+    name: Grading evaluation (sample)
+    runs-on: ubuntu-latest
+    # Only run on schedule or when eval/api code changes
+    if: |
+      github.event_name == 'schedule' ||
+      contains(github.event.head_commit.modified, 'api/') ||
+      contains(github.event.head_commit.modified, 'benchmarks/')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: pip install -r requirements.txt pillow
+      - name: Generate sample assignment dataset (50 pages)
+        run: |
+          python3 scripts/generate_student_assignments.py \
+            --count 50 --seed 42 \
+            --output /tmp/sample_assignments
+      - name: Note — extraction skipped in CI (no LM Studio or API key)
+        run: |
+          echo "Extraction benchmarks require LM Studio or a valid VISION_AGENT_API_KEY."
+          echo "Run locally: python benchmarks/eval_teacher_grading.py --eval-dir /tmp/sample_assignments/eval"
+
+on:
+  schedule:
+    # Weekly on Monday at 02:00 UTC
+    - cron: "0 2 * * 1"
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
