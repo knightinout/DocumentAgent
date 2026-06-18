@@ -1,4 +1,4 @@
-# DocumentAgent — Architecture & Technical Reference
+han# DocumentAgent — Architecture & Technical Reference
 
 ---
 
@@ -143,11 +143,28 @@ User / Streamlit App
 ## Benchmark: Cloud vs Local
 
 See [`benchmarks/results.md`](benchmarks/results.md) for the full Phase 2 benchmark
-comparing Landing AI AIDE vs Gemma 3 4B on 20+ Indian documents.
+comparing Landing AI AIDE vs Gemma 3 4B on 20 Indian documents (invoices, handwritten
+ledgers, government forms, ID-style cards).
 
-**Recommendation:** Use **cloud (AIDE)** for accuracy-critical extraction; use **Local
-(Gemma 3 4B via LM Studio)** when documents must not leave the machine (Aadhaar, PAN,
-sensitive financial records).
+| Metric | Cloud (AIDE) | Local (Gemma 3 4B) |
+|---|---|---|
+| Overall field accuracy | **90.0%** | 78.9% |
+| Avg latency / page | **2.5s** | 18.1s (CPU) / ~6s (GPU) |
+| Cost per page | ~$0.015 | $0.00 |
+| Hardest category | Ledgers 80.0% | Ledgers 60.0% |
+
+**Decision rule:**
+
+| Use case | Recommendation |
+|---|---|
+| Answer sheet grading, mark sheets, structured invoices | **Cloud (AIDE)** — 10 pp accuracy advantage |
+| Aadhaar / PAN / medical / sensitive student PII | **Local (Gemma 3 4B)** — no data leaves machine |
+| Handwritten answer sheets where marks accuracy is critical | **Cloud (AIDE)** — Gemma 60% field acc too low |
+| Air-gapped school deployment | **Local (Gemma 3 4B)** — no external dependency |
+
+The mobile app's **Settings → Extraction Backend** toggle implements this decision:
+default is Cloud for accuracy; switch to Local when school policy prohibits upload of
+student documents.
 
 ---
 
