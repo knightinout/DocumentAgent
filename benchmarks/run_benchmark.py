@@ -391,7 +391,7 @@ def run_benchmark(
     dataset_dir: Path,
     backend: str,
     api_key: str = "",
-    model: str = "dpt-2-mini",
+    model: str = "dpt-2-latest",
     local_model_repo: str | None = None,
     lmstudio_base_url: str = _DEFAULT_LMSTUDIO_BASE_URL,
 ) -> dict[str, Any]:
@@ -508,7 +508,7 @@ def _write_results_md(local_summary: dict, cloud_summary: dict, out_path: Path) 
         "",
         "| Item | Cloud Path | Local Path |",
         "|---|---|---|",
-        f"| Model | Landing AI AIDE (`{cloud_summary.get('model', 'dpt-2-mini')}`) | "
+        f"| Model | Landing AI AIDE (`{cloud_summary.get('model', 'dpt-2-latest')}`) | "
         f"Gemma 3 4B IT (VLM, 4-bit MLX) |",
         "| Runtime | Landing AI API | Apple MLX (embedded, in-process) |",
         "| Hardware | Cloud (Landing AI infra) | Local Apple Silicon Mac |",
@@ -651,7 +651,7 @@ def main() -> None:
     parser.add_argument("--backend", choices=["local", "cloud", "lmstudio"], default="local",
                         help="Extraction backend (used with --dataset-dir)")
     parser.add_argument("--api-key", default="", help="Landing AI API key (cloud only)")
-    parser.add_argument("--model", default="dpt-2-mini",
+    parser.add_argument("--model", default="dpt-2-latest",
                         help="ADE model variant (cloud), or the model name as loaded "
                              "in LM Studio (lmstudio)")
     parser.add_argument("--local-model", default=None,

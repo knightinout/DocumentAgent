@@ -84,14 +84,15 @@ def run_local(doc_bytes: bytes, filename: str, repo_id: str | None = None) -> di
             tmp_path.unlink()
 
 
-def run_cloud(doc_bytes: bytes, filename: str, api_key: str, model: str = "dpt-2-mini") -> dict:
+def run_cloud(doc_bytes: bytes, filename: str, api_key: str, model: str = "dpt-2-latest") -> dict:
     """Extract text using the Landing AI ADE cloud API.
 
     Args:
         doc_bytes: Raw file bytes.
         filename:  Original filename.
         api_key:   Landing AI API key.
-        model:     ADE model variant ('dpt-2-mini' or 'dpt-2-latest').
+        model:     ADE model variant ('dpt-2-latest' or 'dpt-2-mini' — the latter has
+                   returned 422 Unsupported model against current API keys).
 
     Returns:
         Extraction result dict (see module docstring).
@@ -140,7 +141,7 @@ def run(
     *,
     use_local: bool = True,
     api_key: str | None = None,
-    model: str = "dpt-2-mini",
+    model: str = "dpt-2-latest",
 ) -> dict:
     """Dispatch to local or cloud backend.
 

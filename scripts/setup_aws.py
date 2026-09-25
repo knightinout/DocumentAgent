@@ -299,7 +299,7 @@ def setup_lambda(lm, bucket, region, account_id, project,
         "BEDROCK_KB_ID": "PLACEHOLDER",   # updated after KB creation
         "BEDROCK_DS_ID": "PLACEHOLDER",
         "LANDING_AI_SECRET_NAME": f"{project}/landing-ai-key",
-        "ADE_MODEL": "dpt-2-mini",
+        "ADE_MODEL": "dpt-2-latest",
     }
 
     # IAM roles take ~10s to propagate; wait if this is a fresh role

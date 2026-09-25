@@ -12,14 +12,15 @@ Each --model value is "label=kind:value":
     --model gemma4b=local:mlx-community/gemma-3-4b-it-4bit
     --model qwen3b=local:mlx-community/Qwen2.5-VL-3B-Instruct-4bit
     --model qwen7b=local:mlx-community/Qwen2.5-VL-7B-Instruct-4bit
-    --model aide-mini=cloud:dpt-2-mini
     --model aide-latest=cloud:dpt-2-latest
     --model qwen-lmstudio=lmstudio:qwen2.5-vl-7b-instruct
 
 `kind` is "local" (value = MLX repo id, Apple Silicon Mac required), "cloud"
-(value = ADE model variant, requires --api-key), or "lmstudio" (value = the
-model name as loaded in a running LM Studio instance, requires
---lmstudio-base-url reachable — default http://localhost:1234/v1).
+(value = ADE model variant, requires --api-key — "dpt-2-mini" has returned
+"422 Unsupported model" against current API keys; "dpt-2-latest" is known
+to work), or "lmstudio" (value = the model name as loaded in a running LM
+Studio instance, requires --lmstudio-base-url reachable — default
+http://localhost:1234/v1).
 LM Studio is **not** used by the shipped app (local mode runs embedded via
 Apple MLX instead) — this kind exists purely so a model only available
 through LM Studio (e.g. a GGUF-quantized Qwen build) can still be compared
@@ -33,7 +34,7 @@ Usage
         --api-key YOUR_LANDING_AI_KEY \\
         --model gemma4b=local:mlx-community/gemma-3-4b-it-4bit \\
         --model qwen7b=local:mlx-community/Qwen2.5-VL-7B-Instruct-4bit \\
-        --model aide-mini=cloud:dpt-2-mini \\
+        --model aide-latest=cloud:dpt-2-latest \\
         --output benchmarks/model_comparison.json \\
         --write-report benchmarks/model_comparison.md
 
@@ -67,7 +68,7 @@ DEFAULT_MODEL_SPECS = [
     "gemma-4b=local:mlx-community/gemma-3-4b-it-4bit",
     "qwen2.5-vl-3b=local:mlx-community/Qwen2.5-VL-3B-Instruct-4bit",
     "qwen2.5-vl-7b=local:mlx-community/Qwen2.5-VL-7B-Instruct-4bit",
-    "aide-mini=cloud:dpt-2-mini",
+    "aide=cloud:dpt-2-latest",
 ]
 
 
@@ -109,7 +110,7 @@ def run_comparison(
                 dataset_dir=dataset_dir,
                 backend=kind,
                 api_key=api_key,
-                model=value if kind in ("cloud", "lmstudio") else "dpt-2-mini",
+                model=value if kind in ("cloud", "lmstudio") else "dpt-2-latest",
                 local_model_repo=value if kind == "local" else None,
                 lmstudio_base_url=lmstudio_base_url,
             )

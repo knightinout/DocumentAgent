@@ -80,7 +80,7 @@ def render() -> None:
             format_func=lambda m: (
                 "dpt-2-latest — high accuracy (3 cr/page)"
                 if m == "dpt-2-latest"
-                else "dpt-2-mini — faster (1.5 cr/page)"
+                else "dpt-2-mini — faster, if available on your key (1.5 cr/page)"
             ),
         )
 

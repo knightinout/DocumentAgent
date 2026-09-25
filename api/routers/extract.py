@@ -32,7 +32,7 @@ async def extract(
     file: Annotated[UploadFile, File(description="Document to extract (PDF/PNG/JPEG)")],
     use_local: Annotated[bool, Form()] = True,
     api_key: Annotated[str, Form()] = "",
-    model: Annotated[str, Form()] = "dpt-2-mini",
+    model: Annotated[str, Form()] = "dpt-2-latest",
 ) -> ExtractResponse:
     """Extract text from an uploaded document.
 
@@ -40,7 +40,9 @@ async def extract(
     - **file**: Document file (required).
     - **use_local**: ``true`` → embedded local MLX model; ``false`` → Landing AI ADE (default: true).
     - **api_key**: Landing AI API key (required when ``use_local=false``).
-    - **model**: ADE model variant — ``dpt-2-mini`` | ``dpt-2-latest`` (default: dpt-2-mini).
+    - **model**: ADE model variant — ``dpt-2-latest`` | ``dpt-2-mini`` (default: dpt-2-latest;
+      ``dpt-2-mini`` has returned ``422 Unsupported model`` against current API keys — verify
+      before relying on it).
 
     Response headers:
     - ``X-Request-ID``: Unique request identifier.

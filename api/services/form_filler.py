@@ -194,7 +194,7 @@ def fill(
     *,
     use_local: bool = True,
     api_key: str | None = None,
-    model: str = "dpt-2-mini",
+    model: str = "dpt-2-latest",
     answer_key: dict | None = None,
 ) -> FormFillResult:
     """Run the two-stage form-fill pipeline.

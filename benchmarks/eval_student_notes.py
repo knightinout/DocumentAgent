@@ -123,7 +123,7 @@ def evaluate(
     eval_dir: Path,
     backend: str = "local",
     api_key: str = "",
-    model: str = "dpt-2-mini",
+    model: str = "dpt-2-latest",
 ) -> dict:
     """Run evaluation over all images in *eval_dir*.
 
@@ -233,7 +233,7 @@ def main() -> None:
         help="Extraction backend (default: local)",
     )
     parser.add_argument("--api-key", default="", help="Landing AI API key (cloud only)")
-    parser.add_argument("--model", default="dpt-2-mini", help="ADE model variant (cloud only)")
+    parser.add_argument("--model", default="dpt-2-latest", help="ADE model variant (cloud only)")
     parser.add_argument(
         "--format",
         choices=["text", "markdown", "json"],
