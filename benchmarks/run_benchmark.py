@@ -217,6 +217,34 @@ def _best_matching_key(k_norm: str, expected_keys: list[str]) -> str | None:
     return best_key
 
 
+_HTML_TR = re.compile(r"<tr[^>]*>(.*?)</tr>", re.IGNORECASE | re.DOTALL)
+_HTML_CELL = re.compile(r"<t[dh][^>]*>(.*?)</t[dh]>", re.IGNORECASE | re.DOTALL)
+_HTML_TAG = re.compile(r"<[^>]+>")
+
+
+def _html_tables_to_pipes(markdown: str) -> str:
+    """Rewrite literal HTML <tr>/<td> table rows as "| cell | cell |" rows.
+
+    Landing AI's ADE API renders tables as literal HTML
+    (`<tr><td>Applicant Name:</td><td>Nisha Kapoor</td></tr>`), not Markdown
+    pipe tables — the local MLX models never do this, so the table-row
+    parser below never needed to handle it. Left unconverted, the line falls
+    through to the colon-separated pattern, which partitions on the *first*
+    colon in the raw HTML and produces a value still full of markup
+    (`</td><td id="0-3">Nisha Kapoor</td></tr>`) — technically present but
+    never exact-matches the clean ground-truth value. Converting each row
+    upfront lets the one table parser serve both output styles.
+    """
+    if "<tr" not in markdown.lower():
+        return markdown
+
+    def _row_to_pipes(m: re.Match) -> str:
+        cells = [_HTML_TAG.sub(" ", c).strip() for c in _HTML_CELL.findall(m.group(1))]
+        return "| " + " | ".join(cells) + " |"
+
+    return _HTML_TR.sub(_row_to_pipes, markdown)
+
+
 def _extract_fields_from_markdown(markdown: str, expected_keys: list[str]) -> dict[str, str]:
     """Heuristically extract key-value pairs from extracted markdown text.
 
@@ -228,6 +256,9 @@ def _extract_fields_from_markdown(markdown: str, expected_keys: list[str]) -> di
                              VALUE too, not just the key, or every extracted
                              value gets a stray leading "**")
         | Key | Value |
+        <tr><td>Key</td><td>Value</td></tr>  (Landing AI ADE's table style —
+                             normalised to "| Key | Value |" up front, see
+                             `_html_tables_to_pipes`)
 
     Returns a dict of lowercased-key → extracted-value-string. Each line
     contributes to at most one expected key (see `_best_matching_key`), and
@@ -238,7 +269,7 @@ def _extract_fields_from_markdown(markdown: str, expected_keys: list[str]) -> di
     table-parsed one.
     """
     extracted: dict[str, str] = {}
-    lines = markdown.splitlines()
+    lines = _html_tables_to_pipes(markdown).splitlines()
 
     for line in lines:
         matched_via_table = False

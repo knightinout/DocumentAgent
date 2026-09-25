@@ -146,45 +146,53 @@ User / Streamlit App
 
 ## Benchmark: Cloud vs Local
 
-See [`benchmarks/results.md`](benchmarks/results.md) for the full Phase 2 benchmark
-comparing Landing AI AIDE vs Gemma 3 4B on 20 Indian documents (invoices, handwritten
-ledgers, government forms, ID-style cards).
+**Current comparison** — all four models run under the same corrected
+scoring harness against this project's own 20-document dataset (invoices,
+handwritten ledgers, government forms, ID-style cards), via
+[`benchmarks/eval_models.py`](benchmarks/eval_models.py). Full per-category
+breakdown in [`benchmarks/model_comparison.md`](benchmarks/model_comparison.md):
 
-**Historical baseline** (measured via LM Studio, CPU-only inference, before the
-switch to embedded Apple MLX):
+| Model | Backend | Field Acc | Fuzzy Acc | Avg Latency | Cost/page |
+|---|---|---|---|---|---|
+| Qwen3-VL-32B | LM Studio (benchmark-only — not used by the shipped app) | 52.8% | 52.8% | 28.1s | $0.00 |
+| **Qwen2.5-VL-3B** | **Local — Apple MLX (current default)** | **49.6%** | 50.0% | **2.7s** | $0.00 |
+| Landing AI AIDE (`dpt-2-latest`) | Cloud | 49.1% | 49.1% | 8.5s | $0.015 |
+| Gemma-3-4B | Local — Apple MLX (former default) | 44.2% | 45.0% | 3.2s | $0.00 |
+
+All four land within ~9 percentage points of each other. Cloud AIDE no
+longer shows the large accuracy edge the historical baseline below
+suggested — the current local default is essentially tied with it while
+running ~3x faster at no per-page cost.
+
+This required fixing a harness bug first: an initial run scored AIDE at
+only 19.1% field accuracy, because Landing AI's ADE API returns tables as
+literal HTML (`<tr><td>Key:</td><td>Value</td></tr>`) rather than Markdown
+pipe tables — the field-extraction heuristic in `run_benchmark.py` had only
+ever been exercised against the local MLX models' Markdown-table output,
+and mangled every HTML-table value it touched (e.g. `</td><td
+id="0-3">Nisha Kapoor</td></tr>` instead of `Nisha Kapoor`). Fixed by
+`_html_tables_to_pipes()`, which normalises HTML table rows into the same
+`| Key | Value |` shape the parser already understood. (Also note: this
+run used `dpt-2-latest`, not the app's hardcoded default `dpt-2-mini` —
+the latter returned `422 Unsupported model` against the API key used here.)
+
+**Historical baseline** (measured via LM Studio, CPU-only local inference,
+under an earlier/different scoring pass — kept for reference, not directly
+comparable to the corrected table above):
 
 | Metric | Cloud (AIDE) | Local (Gemma 3 4B, LM Studio/CPU) |
 |---|---|---|
-| Overall field accuracy | **90.0%** | 78.9% |
-| Avg latency / page | **2.5s** | 18.1s (CPU) / ~6s (GPU, estimated) |
+| Overall field accuracy | 90.0% | 78.9% |
+| Avg latency / page | 2.5s | 18.1s (CPU) / ~6s (GPU, estimated) |
 | Cost per page | ~$0.015 | $0.00 |
 | Hardest category | Ledgers 80.0% | Ledgers 60.0% |
 
 The local runtime is now Apple MLX (Metal-accelerated) instead of LM Studio.
-
-**Local model comparison** (measured via
-[`benchmarks/eval_models.py`](benchmarks/eval_models.py) on this project's
-own 20-document dataset — see
-[`benchmarks/model_comparison.md`](benchmarks/model_comparison.md) for the
-full per-category breakdown): comparing the two local models under MLX
-directly (no cloud numbers in this run) found **Qwen2.5-VL-3B outperforms
-the previous default, Gemma-3-4B**, with faster or comparable latency and a
-smaller download:
-
-| Metric | Gemma-3-4B (old default) | Qwen2.5-VL-3B (current default) |
-|---|---|---|
-| Overall field accuracy | 30.9% | 34.6–38.1% (varies slightly run to run) |
-| Overall fuzzy accuracy | 34.4% | 37.7–41.2% |
-| Avg latency / page | 3.1s | 2.6s |
-| Model download | ~3.4 GB | ~2.5 GB |
-
-Note these exact-match field-accuracy figures are **not directly comparable**
-to the historical 78.9%/90.0% cloud-comparison numbers above — those used a
-different scoring pass. Qwen currently has one known limitation: an
-`mlx-vlm` tokenizer bug (`IndexError` in `detokenizer.add_token`, upstream in
-the `mlx-vlm` package, not this project's code) intermittently fails a small
-fraction of documents; the harness handles this gracefully (scores that
-document 0% rather than crashing the run).
+Qwen2.5-VL-3B has one known limitation: an `mlx-vlm` tokenizer bug
+(`IndexError` in `detokenizer.add_token`, upstream in the `mlx-vlm` package,
+not this project's code) intermittently fails a small fraction of
+documents; the harness handles this gracefully (scores that document 0%
+rather than crashing the run).
 
 Set `LOCAL_MODEL_REPO=mlx-community/Qwen2.5-VL-7B-Instruct-4bit` to try the
 larger 7B variant for potentially better accuracy at the cost of a bigger
@@ -194,14 +202,14 @@ download and slower inference — not yet benchmarked on this dataset.
 
 | Use case | Recommendation |
 |---|---|
-| Answer sheet grading, mark sheets, structured invoices | **Cloud (AIDE)** — large accuracy advantage |
+| Default / no strong constraint | **Local (Qwen2.5-VL-3B)** — accuracy is now on par with cloud, free, ~3x faster |
 | Aadhaar / PAN / medical / sensitive student PII | **Local (Qwen2.5-VL-3B)** — no data leaves machine |
-| Handwritten answer sheets where marks accuracy is critical | **Cloud (AIDE)** — local field accuracy too low |
 | Air-gapped school deployment | **Local (Qwen2.5-VL-3B)** — no external dependency |
+| Willing to pay per page for the small remaining edge on structured tables | **Cloud (AIDE)** — modest lead on invoices/govt forms, $0.015/page |
 
-The mobile app's **Settings → Extraction Backend** toggle implements this decision:
-default is Cloud for accuracy; switch to Local when school policy prohibits upload of
-student documents.
+The mobile app's **Settings → Extraction Backend** toggle lets a user choose either
+path; its current default is Cloud, a holdover from when Cloud had a large accuracy
+lead — worth revisiting now that Local is roughly at parity (see table above).
 
 ---
 
