@@ -17,7 +17,7 @@ Categories tested
 
 Usage
 -----
-    # Local backend (requires LM Studio running on port 1234)
+    # Local backend (embedded Apple MLX — Apple Silicon Mac required)
     python benchmarks/run_benchmark.py \\
         --dataset-dir benchmarks/dataset \\
         --backend local \\
@@ -29,6 +29,16 @@ Usage
         --backend cloud \\
         --api-key YOUR_KEY \\
         --output benchmarks/run_cloud.json
+
+    # LM Studio backend (benchmark-only — compares a model served through LM
+    # Studio; not used by the shipped app, which runs local models embedded
+    # via Apple MLX instead)
+    python benchmarks/run_benchmark.py \\
+        --dataset-dir benchmarks/dataset \\
+        --backend lmstudio \\
+        --model qwen2.5-vl-7b-instruct \\
+        --lmstudio-base-url http://localhost:1234/v1 \\
+        --output benchmarks/run_lmstudio.json
 
     # Compare two pre-run JSON result files and write results.md
     python benchmarks/run_benchmark.py \\
@@ -44,9 +54,16 @@ import argparse
 import json
 import logging
 import re
+import sys
 import time
 from pathlib import Path
 from typing import Any
+
+# Make the project root importable (for `from api.services... import ...`
+# below) regardless of how this script is invoked — direct `python
+# benchmarks/run_benchmark.py` only puts this file's own directory on
+# sys.path, not the project root.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -57,6 +74,65 @@ logger = logging.getLogger(__name__)
 
 _CLOUD_COST_USD_PER_PAGE = 0.015   # approximate Landing AI AIDE credit ≈ $0.015
 _LOCAL_COST_USD_PER_PAGE = 0.000   # free after one-time model download
+_LMSTUDIO_COST_USD_PER_PAGE = 0.000  # free — runs on the user's own machine
+
+_DEFAULT_LMSTUDIO_BASE_URL = "http://localhost:1234/v1"
+
+# Same instruction given to the embedded MLX model (local_model.py's
+# _EXTRACT_PROMPT) — keeping the prompt identical is what makes an
+# LM-Studio-served model comparable to the local/cloud rows in the same report.
+_LMSTUDIO_EXTRACT_PROMPT = (
+    "Extract all text, tables, and key-value pairs from this document image. "
+    "Return clean Markdown. Preserve table structure. Do not add commentary."
+)
+
+
+def _call_lmstudio(
+    image_bytes: bytes,
+    filename: str,
+    base_url: str,
+    model: str,
+    timeout: float = 180.0,
+) -> dict[str, Any]:
+    """Send one document image to a model loaded in LM Studio for extraction.
+
+    Benchmark-only: LM Studio was removed as a runtime dependency of the
+    shipped app (replaced by embedded Apple MLX — see ARCHITECTURE.md) but
+    stays useful here as *one more model source* to compare against local
+    MLX and cloud AIDE on this project's own dataset. Talks to LM Studio's
+    OpenAI-compatible REST server directly via `requests` rather than the
+    `openai` package, since that package was removed from requirements.txt
+    when LM Studio was dropped from the app itself.
+    """
+    import base64
+    import mimetypes
+
+    import requests
+
+    mime = mimetypes.guess_type(filename)[0] or "image/png"
+    data_url = f"data:{mime};base64,{base64.b64encode(image_bytes).decode('ascii')}"
+
+    resp = requests.post(
+        f"{base_url.rstrip('/')}/chat/completions",
+        json={
+            "model": model,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": _LMSTUDIO_EXTRACT_PROMPT},
+                        {"type": "image_url", "image_url": {"url": data_url}},
+                    ],
+                }
+            ],
+            "max_tokens": 2048,
+            "temperature": 0.1,
+        },
+        timeout=timeout,
+    )
+    resp.raise_for_status()
+    text = resp.json()["choices"][0]["message"]["content"] or ""
+    return {"markdown": text, "page_count": 1, "model": model}
 
 
 # ---------------------------------------------------------------------------
@@ -65,11 +141,27 @@ _LOCAL_COST_USD_PER_PAGE = 0.000   # free after one-time model download
 
 _STRIP = re.compile(r"[^\w\s\.\-\/\+@₹$]")
 
+# Currency-word tokens stripped during normalisation so "Rs. 10489" compares
+# equal to "10489" — models often echo the currency label the document uses,
+# which shouldn't count as a mismatch against a ground-truth value that
+# stores just the number.
+_CURRENCY_WORDS = {"rs", "inr", "usd", "aed"}
+
 
 def _normalise(text: str) -> str:
-    """Lower-case, collapse whitespace, strip punctuation for fuzzy comparison."""
-    text = _STRIP.sub(" ", str(text).lower())
-    return " ".join(text.split())
+    """Lower-case, collapse whitespace, strip punctuation/currency words for comparison.
+
+    Apostrophes are deleted outright (not turned into a space) before the
+    general punctuation strip: "Father's" must become "fathers", not
+    "father s" — the latter splits into two tokens and stops "Father's
+    Name" ever matching the expected key "fathers_name" (normalised to
+    "fathers name"), leaving the generic key "name" as the only candidate
+    and silently mismatching the field.
+    """
+    text = str(text).lower().replace("'", "").replace("’", "")
+    text = _STRIP.sub(" ", text)
+    tokens = [t for t in text.split() if t.rstrip(".") not in _CURRENCY_WORDS]
+    return " ".join(tokens)
 
 
 def _token_f1(pred: str, gold: str) -> float:
@@ -88,38 +180,87 @@ def _token_f1(pred: str, gold: str) -> float:
     return 2 * precision * recall / (precision + recall)
 
 
+def _strip_md_emphasis(text: str) -> str:
+    """Remove markdown bold/italic asterisks and surrounding whitespace."""
+    return re.sub(r"\*+", "", text).strip()
+
+
+def _best_matching_key(k_norm: str, expected_keys: list[str]) -> str | None:
+    """Pick the single expected key that best matches a document-side label.
+
+    Prefers an exact normalised match; falls back to substring containment
+    (e.g. document label "Applicant Name" matching expected key "name") but
+    always prefers the most specific (longest) candidate. Without this,
+    checking "does either string contain the other" independently for every
+    expected key lets a generic key like "name" match a *more specific*
+    document label like "Father's Name" purely because "name" is a literal
+    substring of it — verified in practice to swap `name`/`fathers_name`
+    values on every ID-document benchmark run, for every model tested
+    (local MLX and LM Studio alike), since it's a parsing bug independent
+    of what the model actually outputs.
+    """
+    best_key: str | None = None
+    best_score = -1
+    for ek in expected_keys:
+        ek_norm = _normalise(ek).replace("_", " ")
+        if not ek_norm:
+            continue
+        if ek_norm == k_norm:
+            score = 1000 + len(ek_norm)
+        elif ek_norm in k_norm or k_norm in ek_norm:
+            score = len(ek_norm)
+        else:
+            continue
+        if score > best_score:
+            best_score = score
+            best_key = ek
+    return best_key
+
+
 def _extract_fields_from_markdown(markdown: str, expected_keys: list[str]) -> dict[str, str]:
     """Heuristically extract key-value pairs from extracted markdown text.
 
     Looks for patterns like:
         Key: Value
         **Key**: Value
+        **Key:** Value      (bold wraps the colon too — the local MLX model's
+                             actual style; must strip asterisks from the
+                             VALUE too, not just the key, or every extracted
+                             value gets a stray leading "**")
         | Key | Value |
 
-    Returns a dict of lowercased-key → extracted-value-string.
+    Returns a dict of lowercased-key → extracted-value-string. Each line
+    contributes to at most one expected key (see `_best_matching_key`), and
+    a line already resolved via the table-row pattern skips the colon-
+    separated pattern — re-running both on "| Key: | Value |" style rows
+    (table AND colon syntax on the same line) previously let the colon pass
+    re-assign a pipe-contaminated value ("| DEEPAK VERMA |") over the clean
+    table-parsed one.
     """
     extracted: dict[str, str] = {}
     lines = markdown.splitlines()
 
     for line in lines:
+        matched_via_table = False
+
         # Table row: | key | value |
-        parts = [p.strip() for p in line.split("|") if p.strip()]
+        parts = [_strip_md_emphasis(p) for p in line.split("|") if p.strip()]
         if len(parts) == 2:
             k_norm = _normalise(parts[0])
-            for ek in expected_keys:
-                if _normalise(ek).replace("_", " ") in k_norm or k_norm in _normalise(ek).replace("_", " "):
-                    extracted[ek] = parts[1]
+            best = _best_matching_key(k_norm, expected_keys)
+            if best:
+                extracted[best] = parts[1]
+                matched_via_table = True
 
-        # Colon-separated: Key: Value
-        if ":" in line:
+        # Colon-separated: Key: Value (asterisks/pipes may wrap either side)
+        if not matched_via_table and ":" in line:
             raw_key, _, raw_val = line.partition(":")
-            raw_key = re.sub(r"\*", "", raw_key).strip()
-            raw_val = raw_val.strip()
+            raw_key = _strip_md_emphasis(raw_key).strip("| \t")
+            raw_val = _strip_md_emphasis(raw_val).strip("| \t")
             k_norm = _normalise(raw_key)
-            for ek in expected_keys:
-                if _normalise(ek).replace("_", " ") in k_norm or k_norm in _normalise(ek).replace("_", " "):
-                    if raw_val:
-                        extracted[ek] = raw_val
+            best = _best_matching_key(k_norm, expected_keys)
+            if best and raw_val:
+                extracted[best] = raw_val
 
     return extracted
 
@@ -134,22 +275,28 @@ def _evaluate_document(
     backend: str,
     api_key: str,
     model: str,
+    local_model_repo: str | None = None,
+    lmstudio_base_url: str = _DEFAULT_LMSTUDIO_BASE_URL,
 ) -> dict[str, Any]:
     """Run extraction on one image and return evaluation metrics."""
     fields: dict[str, str] = gt.get("fields", {})
     expected_keys = list(fields.keys())
 
     t0 = time.perf_counter()
+    resolved_model = model
     try:
         doc_bytes = img_path.read_bytes()
         if backend == "local":
             from api.services.extraction import run_local
-            result = run_local(doc_bytes, img_path.name)
+            result = run_local(doc_bytes, img_path.name, repo_id=local_model_repo)
+        elif backend == "lmstudio":
+            result = _call_lmstudio(doc_bytes, img_path.name, lmstudio_base_url, model)
         else:
             from api.services.extraction import run_cloud
             result = run_cloud(doc_bytes, img_path.name, api_key=api_key, model=model)
         markdown = result["markdown"]
         page_count = result.get("page_count", 1)
+        resolved_model = result.get("model", resolved_model)
         extraction_ok = True
     except Exception as exc:
         logger.error("Extraction failed for %s: %s", img_path.name, exc)
@@ -158,7 +305,12 @@ def _evaluate_document(
         extraction_ok = False
 
     latency_ms = int((time.perf_counter() - t0) * 1000)
-    cost_per_page = _CLOUD_COST_USD_PER_PAGE if backend == "cloud" else _LOCAL_COST_USD_PER_PAGE
+    if backend == "cloud":
+        cost_per_page = _CLOUD_COST_USD_PER_PAGE
+    elif backend == "lmstudio":
+        cost_per_page = _LMSTUDIO_COST_USD_PER_PAGE
+    else:
+        cost_per_page = _LOCAL_COST_USD_PER_PAGE
     total_cost = cost_per_page * max(page_count, 1)
 
     extracted = _extract_fields_from_markdown(markdown, expected_keys)
@@ -188,6 +340,7 @@ def _evaluate_document(
     return {
         "file": img_path.name,
         "category": gt.get("category", "unknown"),
+        "model": resolved_model,
         "extraction_ok": extraction_ok,
         "latency_ms": latency_ms,
         "cost_usd": round(total_cost, 5),
@@ -208,10 +361,23 @@ def run_benchmark(
     backend: str,
     api_key: str = "",
     model: str = "dpt-2-mini",
+    local_model_repo: str | None = None,
+    lmstudio_base_url: str = _DEFAULT_LMSTUDIO_BASE_URL,
 ) -> dict[str, Any]:
     """Run benchmark over all images in dataset_dir.
 
     Expects layout: dataset_dir/{category}/{stem}.png + {stem}.json
+
+    Args:
+        local_model_repo: For backend="local", override the MLX model repo id
+            for this run only (defaults to LOCAL_MODEL_REPO / the app's
+            configured default). Lets one process benchmark multiple local
+            models against the same dataset — see eval_models.py.
+        lmstudio_base_url: For backend="lmstudio", the base URL of a running
+            LM Studio server (OpenAI-compatible REST API). `model` is the
+            model name as loaded in LM Studio. Benchmark-only — LM Studio is
+            not used by the shipped app; this exists to compare a model
+            served through it against the embedded MLX and cloud paths.
     """
     all_results: list[dict] = []
     categories = sorted([d.name for d in dataset_dir.iterdir() if d.is_dir()])
@@ -233,7 +399,11 @@ def run_benchmark(
                 continue
             gt = json.loads(gt_path.read_text(encoding="utf-8"))
             logger.info("Evaluating %s/%s ...", cat, img_path.name)
-            result = _evaluate_document(img_path, gt, backend, api_key, model)
+            result = _evaluate_document(
+                img_path, gt, backend, api_key, model,
+                local_model_repo=local_model_repo,
+                lmstudio_base_url=lmstudio_base_url,
+            )
             all_results.append(result)
             logger.info(
                 "  %-40s exact=%.0f%% fuzzy=%.0f%% latency=%dms cost=$%.4f",
@@ -260,9 +430,14 @@ def run_benchmark(
         }
 
     overall = all_results
+    # Prefer the actual resolved model name reported by extraction (accurate
+    # even if local_model_repo wasn't passed, or the default model changes).
+    resolved_local_model = (
+        overall[0]["model"] if overall and backend in ("local", "lmstudio") else local_model_repo
+    )
     summary = {
         "backend": backend,
-        "model": model if backend == "cloud" else "gemma-3-4b",
+        "model": model if backend == "cloud" else (resolved_local_model or "unknown"),
         "total_documents": len(overall),
         "field_accuracy": round(sum(r["field_accuracy"] for r in overall) / len(overall), 3) if overall else 0,
         "fuzzy_accuracy": round(sum(r["fuzzy_accuracy"] for r in overall) / len(overall), 3) if overall else 0,
@@ -303,9 +478,9 @@ def _write_results_md(local_summary: dict, cloud_summary: dict, out_path: Path) 
         "| Item | Cloud Path | Local Path |",
         "|---|---|---|",
         f"| Model | Landing AI AIDE (`{cloud_summary.get('model', 'dpt-2-mini')}`) | "
-        f"Gemma 3 4B IT (VLM, Q4\\_K\\_M) |",
-        "| Runtime | Landing AI API | LM Studio, port 1234 |",
-        "| Hardware | Cloud (Landing AI infra) | Local machine |",
+        f"Gemma 3 4B IT (VLM, 4-bit MLX) |",
+        "| Runtime | Landing AI API | Apple MLX (embedded, in-process) |",
+        "| Hardware | Cloud (Landing AI infra) | Local Apple Silicon Mac |",
         "| Cost | ~$0.015/page | $0.00/page (after model download) |",
         "",
         "---",
@@ -384,7 +559,7 @@ def _write_results_md(local_summary: dict, cloud_summary: dict, out_path: Path) 
         "- **Use cloud (AIDE)** when field accuracy is paramount — especially for "
         "structured tables (invoices, mark sheets), mixed Hindi/English forms, and "
         "accuracy-sensitive workflows like payroll or tax documents.",
-        "- **Use local (Gemma 3 4B via LM Studio)** when documents must not leave "
+        "- **Use local (Gemma 3 4B via embedded Apple MLX)** when documents must not leave "
         "the machine — Aadhaar, PAN, medical records, student exam sheets containing "
         "roll numbers. Accuracy on simple printed documents is within acceptable range; "
         "handwritten content sees a ~8–12 pp accuracy drop vs AIDE.",
@@ -399,7 +574,7 @@ def _write_results_md(local_summary: dict, cloud_summary: dict, out_path: Path) 
         "# 1. Generate the dataset (one-time, ~20 seconds)",
         "python scripts/generate_benchmark_dataset.py",
         "",
-        "# 2a. Run local backend (requires LM Studio on port 1234)",
+        "# 2a. Run local backend (embedded Apple MLX — Apple Silicon Mac required)",
         "python benchmarks/run_benchmark.py \\",
         "    --dataset-dir benchmarks/dataset \\",
         "    --backend local \\",
@@ -442,15 +617,25 @@ def main() -> None:
     group.add_argument("--compare", nargs=2, metavar=("LOCAL_JSON", "CLOUD_JSON"),
                        help="Compare two pre-run JSON result files")
 
-    parser.add_argument("--backend", choices=["local", "cloud"], default="local",
+    parser.add_argument("--backend", choices=["local", "cloud", "lmstudio"], default="local",
                         help="Extraction backend (used with --dataset-dir)")
     parser.add_argument("--api-key", default="", help="Landing AI API key (cloud only)")
-    parser.add_argument("--model", default="dpt-2-mini", help="ADE model variant (cloud only)")
+    parser.add_argument("--model", default="dpt-2-mini",
+                        help="ADE model variant (cloud), or the model name as loaded "
+                             "in LM Studio (lmstudio)")
+    parser.add_argument("--local-model", default=None,
+                        help="Override the local MLX model repo id for this run "
+                             "(local backend only), e.g. "
+                             "mlx-community/Qwen2.5-VL-7B-Instruct-4bit")
+    parser.add_argument("--lmstudio-base-url", default=_DEFAULT_LMSTUDIO_BASE_URL,
+                        help="LM Studio server base URL (lmstudio backend only, "
+                             f"default: {_DEFAULT_LMSTUDIO_BASE_URL}). Benchmark-only — "
+                             "not used by the shipped app.")
     parser.add_argument("--output", default="", help="Write JSON results to this path")
     parser.add_argument("--write-results-md", action="store_true",
                         help="Write benchmarks/results.md (used with --compare)")
     parser.add_argument("--strict", action="store_true",
-                        help="Exit 1 if field accuracy < 80% for any category")
+                        help="Exit 1 if field accuracy < 80%% for any category")
     parser.add_argument("--format", choices=["text", "json", "markdown"], default="text",
                         help="Output format for terminal (default: text)")
     args = parser.parse_args()
@@ -480,6 +665,8 @@ def main() -> None:
         backend=args.backend,
         api_key=args.api_key,
         model=args.model,
+        local_model_repo=args.local_model,
+        lmstudio_base_url=args.lmstudio_base_url,
     )
 
     if not summary:

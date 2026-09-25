@@ -38,6 +38,12 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
+# Make the project root importable (for `from api.services... import ...`
+# below) regardless of how this script is invoked — direct `python
+# benchmarks/eval_teacher_grading.py` only puts this file's own directory on
+# sys.path, not the project root.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
@@ -314,7 +320,7 @@ def main() -> None:
     parser.add_argument(
         "--strict",
         action="store_true",
-        help="Exit 1 if CER >= 15% or Keyword Recall < 80% for any script (CI mode)",
+        help="Exit 1 if CER >= 15%% or Keyword Recall < 80%% for any script (CI mode)",
     )
     args = parser.parse_args()
 
