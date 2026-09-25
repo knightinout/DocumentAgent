@@ -21,6 +21,7 @@ Usage:
 import argparse
 import json
 import os
+import platform
 import shutil
 import subprocess
 import sys
@@ -63,17 +64,51 @@ def ensure_aws_cli():
         ok(f"AWS CLI: {result.stdout.strip() or result.stderr.strip()}")
         return
 
-    print("\n[0/7] Installing AWS CLI v2 (user install, no sudo)...")
+    system = platform.system()
+    if system == "Darwin":
+        _install_aws_cli_macos()
+    elif system == "Linux":
+        _install_aws_cli_linux(local_bin)
+    else:
+        warn(
+            f"Automatic AWS CLI install is not supported on {system}. Install it "
+            "manually: https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html"
+        )
+        sys.exit(1)
+    ok("AWS CLI installed.")
+
+
+def _install_aws_cli_linux(local_bin):
+    print("\n[0/7] Installing AWS CLI v2 (Linux, user install, no sudo)...")
+    arch = "aarch64" if platform.machine().lower() in ("aarch64", "arm64") else "x86_64"
     local_cli = str(Path.home() / ".local" / "aws-cli")
     cmds = [
-        "curl -fsSL https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -o /tmp/awscliv2.zip",
+        f"curl -fsSL https://awscli.amazonaws.com/awscli-exe-linux-{arch}.zip -o /tmp/awscliv2.zip",
         "unzip -qo /tmp/awscliv2.zip -d /tmp/awscliv2",
         f"/tmp/awscliv2/aws/install --install-dir {local_cli} --bin-dir {local_bin}",
         "rm -rf /tmp/awscliv2 /tmp/awscliv2.zip",
     ]
     for cmd in cmds:
         subprocess.run(cmd, shell=True, check=True)
-    ok("AWS CLI installed.")
+
+
+def _install_aws_cli_macos():
+    # macOS ships AWS CLI v2 as a .pkg, not the Linux zip installer — Homebrew
+    # avoids sudo entirely and is the common path on a Mac dev machine.
+    if shutil.which("brew"):
+        print("\n[0/7] Installing AWS CLI v2 (macOS, via Homebrew)...")
+        subprocess.run(["brew", "install", "awscli"], check=True)
+        return
+
+    print("\n[0/7] Installing AWS CLI v2 (macOS, official .pkg)...")
+    warn("Homebrew not found — falling back to the official installer, which needs an admin password.")
+    with tempfile.TemporaryDirectory() as tmpdir:
+        pkg_path = Path(tmpdir) / "AWSCLIV2.pkg"
+        subprocess.run(
+            ["curl", "-fsSL", "https://awscli.amazonaws.com/AWSCLIV2.pkg", "-o", str(pkg_path)],
+            check=True,
+        )
+        subprocess.run(["sudo", "installer", "-pkg", str(pkg_path), "-target", "/"], check=True)
 
 
 # ── Step 1: S3 Bucket ────────────────────────────────────────────────────────
