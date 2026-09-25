@@ -3,6 +3,7 @@
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+import local_model
 from api.main import app
 
 
@@ -33,6 +34,7 @@ class TestHealthEndpoint:
         body = response.json()
         assert "status" in body
         assert "local_model_available" in body
+        assert "local_model_downloaded" in body
         assert "cloud_api_configured" in body
 
     @pytest.mark.anyio
@@ -41,17 +43,25 @@ class TestHealthEndpoint:
         assert response.json()["status"] == "ok"
 
     @pytest.mark.anyio
-    async def test_local_model_available_false_when_no_env(self, client, monkeypatch):
-        monkeypatch.delenv("LM_STUDIO_BASE_URL", raising=False)
-        monkeypatch.delenv("LOCAL_MODEL_NAME", raising=False)
+    async def test_local_model_available_false_on_unsupported_platform(self, client, monkeypatch):
+        monkeypatch.setattr(local_model, "is_platform_supported", lambda: False)
         response = await client.get("/api/v1/health")
         assert response.json()["local_model_available"] is False
+        assert response.json()["local_model_downloaded"] is False
 
     @pytest.mark.anyio
-    async def test_local_model_available_true_when_env_set(self, client, monkeypatch):
-        monkeypatch.setenv("LM_STUDIO_BASE_URL", "http://localhost:1234/v1")
+    async def test_local_model_available_true_on_supported_platform(self, client, monkeypatch):
+        monkeypatch.setattr(local_model, "is_platform_supported", lambda: True)
+        monkeypatch.setattr(local_model, "is_model_ready", lambda *a, **kw: False)
         response = await client.get("/api/v1/health")
         assert response.json()["local_model_available"] is True
+
+    @pytest.mark.anyio
+    async def test_local_model_downloaded_true_when_weights_cached(self, client, monkeypatch):
+        monkeypatch.setattr(local_model, "is_platform_supported", lambda: True)
+        monkeypatch.setattr(local_model, "is_model_ready", lambda *a, **kw: True)
+        response = await client.get("/api/v1/health")
+        assert response.json()["local_model_downloaded"] is True
 
     @pytest.mark.anyio
     async def test_cloud_api_configured_false_when_no_key(self, client, monkeypatch):

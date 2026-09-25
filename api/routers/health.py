@@ -13,16 +13,20 @@ async def health() -> dict:
 
     Response:
         status:                  "ok"
-        local_model_available:   True if LM_STUDIO_BASE_URL is configured
-                                 (does not ping the server).
+        local_model_available:   True if this platform can run the embedded
+                                 MLX local model (Apple Silicon macOS).
+        local_model_downloaded:  True if the local model's weights are
+                                 already cached (no download needed).
         cloud_api_configured:    True if VISION_AGENT_API_KEY is set.
     """
-    local_model_available = bool(
-        os.environ.get("LM_STUDIO_BASE_URL") or os.environ.get("LOCAL_MODEL_NAME")
-    )
+    from local_model import is_model_ready, is_platform_supported
+
+    local_model_available = is_platform_supported()
+    local_model_downloaded = is_model_ready() if local_model_available else False
     cloud_api_configured = bool(os.environ.get("VISION_AGENT_API_KEY"))
     return {
         "status": "ok",
         "local_model_available": local_model_available,
+        "local_model_downloaded": local_model_downloaded,
         "cloud_api_configured": cloud_api_configured,
     }

@@ -39,17 +39,19 @@ COPY --from=builder /install /usr/local
 RUN useradd --system --uid 1001 --no-create-home appuser
 
 # Copy application source
-COPY api/       ./api/
-COPY local_model.py storage.py agent.py app.py ./
+COPY api/         ./api/
+COPY views/       ./views/
+COPY .streamlit/  ./.streamlit/
+COPY local_model.py storage.py agent.py app.py common.py nav.py ./
 
 # Ensure Python path includes /app so `from api.* import` works
 ENV PYTHONPATH=/app \
     PYTHONUNBUFFERED=1
 
 # Default env vars (override at runtime)
-ENV LM_STUDIO_BASE_URL="http://host.docker.internal:1234/v1" \
-    LOCAL_MODEL_NAME="gemma-3-4b-instruct" \
-    CORS_ORIGINS="*"
+# Note: local extraction (embedded Apple MLX) requires Apple Silicon macOS and
+# is unavailable inside this Linux container — Cloud mode is unaffected.
+ENV CORS_ORIGINS="*"
 
 USER appuser
 

@@ -1,6 +1,6 @@
 """Tests for /api/v1/grade/* endpoints.
 
-All extraction and LLM calls are mocked so no LM Studio or API key is needed.
+All extraction and LLM calls are mocked so no local model or API key is needed.
 """
 
 import io
@@ -143,7 +143,7 @@ class TestGradeExtract:
     async def test_backend_unreachable_returns_502(self, client):
         with patch(
             "api.services.extraction.run_local",
-            side_effect=RuntimeError("LM Studio not running"),
+            side_effect=RuntimeError("Local model is not available"),
         ):
             response = await client.post(
                 "/api/v1/grade/extract",

@@ -60,7 +60,7 @@ def create_app() -> FastAPI:
         title="DocumentAgent API",
         description=(
             "Privacy-first document extraction API. "
-            "Supports local (LM Studio / Gemma 3 4B) and cloud (Landing AI ADE) backends."
+            "Supports local (embedded Apple MLX / Qwen2.5-VL-3B) and cloud (Landing AI ADE) backends."
         ),
         version="0.4.0",
         lifespan=lifespan,

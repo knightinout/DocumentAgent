@@ -26,7 +26,7 @@ DocumentAgent is a dual-mode agentic document extraction system:
 
 1. **Cloud path (Landing AI AIDE)**: Uses [Landing AI's AIDE API](https://va.landing.ai/) for high-accuracy structured extraction from scanned or photographed documents — invoices, ledgers, ID documents, government forms.
 
-2. **Local path (Gemma 3 4B via LM Studio)**: An on-device pipeline using Gemma 3 4B (VLM variant) served by [LM Studio](https://lmstudio.ai) for users who prefer not to send documents to external servers. No external API calls during inference.
+2. **Local path (Qwen2.5-VL-3B via Apple MLX)**: An on-device pipeline running Qwen2.5-VL-3B (VLM variant) directly in-process via [Apple MLX](https://github.com/ml-explore/mlx) — no separate server to install or run, no external API calls during inference. Apple Silicon Mac only.
 
 3. **Web demo (Streamlit)**: Developers can explore the interface freely; actual agent extraction requires a Landing AI API key or local model setup.
 
@@ -36,7 +36,7 @@ DocumentAgent is a dual-mode agentic document extraction system:
 
 - Extract **text, tables, and key-value pairs** from scanned or photographed Indian documents
 - Supports both **handwritten and printed** input
-- **Dual-mode inference**: cloud API (Landing AI AIDE) or local model (Gemma 3 4B via LM Studio)
+- **Dual-mode inference**: cloud API (Landing AI AIDE) or local model (Qwen2.5-VL-3B via embedded Apple MLX — no setup)
 - Interactive **Streamlit web demo** and **Jupyter notebook** for feasibility testing
 - **AWS-hosted production backend**: S3, Lambda, Bedrock, Strands Agents
 - **Privacy controls**: choose between cloud processing or fully local inference — no documents sent to external servers in local mode
@@ -46,7 +46,7 @@ DocumentAgent is a dual-mode agentic document extraction system:
 
 ## Architecture
 
-A dual-mode pipeline routes documents through either the Landing AI AIDE cloud API or a local quantized Gemma model, then surfaces structured output via a Streamlit interface backed by an optional AWS production layer.
+A dual-mode pipeline routes documents through either the Landing AI AIDE cloud API or a local quantized Qwen2.5-VL model, then surfaces structured output via a Streamlit interface backed by an optional AWS production layer.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the full diagram, technical stack, privacy model, pricing tiers, and hardware prerequisites.
 
@@ -58,7 +58,7 @@ Planned work is tracked as GitHub Issues. See the [Issues tab](https://github.co
 
 ### V1 — Document Extraction (current)
 
-Upload any document (PDF, image) and get clean structured Markdown output. Runs fully locally via Gemma 3 4B on LM Studio — no data leaves the device.
+Upload any document (PDF, image) and get clean structured Markdown output. Runs fully locally via Qwen2.5-VL-3B through embedded Apple MLX — no data leaves the device, no separate app to install.
 
 ### V2 — Privacy-First Form Fill from Multiple ID Documents
 
@@ -93,8 +93,7 @@ Upload any document (PDF, image) and get clean structured Markdown output. Runs 
 - [Landing AI API key](https://va.landing.ai/) — free tier available
 
 **Local extraction (Phase 2):**
-- [LM Studio](https://lmstudio.ai) with `gemma-3-4b-instruct` VLM variant (~2.5 GB)
-- GPU recommended (8 GB VRAM+); CPU inference works but is slow
+- Apple Silicon Mac (macOS 14+) — no other setup; the model (~2.5 GB) downloads automatically on first extraction
 
 **AWS production backend (Phase 3):**
 - AWS account with access to S3, Lambda, Bedrock, and Secrets Manager
@@ -145,29 +144,37 @@ The app opens at `http://localhost:8501`. Upload a document or pick a sample fro
 
 ---
 
-## Phase 2 — Local Model Setup (LM Studio)
+## Phase 2 — Local Model (Embedded Apple MLX)
 
-The **Local (LM Studio)** backend lets you extract documents entirely on your own machine — no documents leave your device during inference.
+The **Local** mode runs Qwen2.5-VL-3B directly in the same Python process via [Apple MLX](https://github.com/ml-explore/mlx) — no separate app to install or keep running, no API key, no port to configure.
 
 ### Requirements
-- [LM Studio](https://lmstudio.ai) installed (free)
-- ~2.5 GB disk space for the model
-- GPU recommended (8 GB VRAM+); CPU inference works but is slow
+- Apple Silicon Mac (M1 or later), macOS 14+
+- ~2.5 GB free disk space (downloaded automatically, once)
 
 ### Setup steps
 
-1. Download [LM Studio](https://lmstudio.ai) and install it.
-2. In LM Studio, search for **`gemma-3-4b-instruct`** and download the **VLM variant** (Q4_K_M, ~2.5 GB).
-   > **Important:** Use the VLM (vision-language) variant — text-only quantizations silently drop image input. Look for `gemma-3-4b-it` with vision support, not a text-only GGUF.
-3. Start the local server: **Developer tab → Start Server** (port 1234). The model loads in 10–30 seconds on first start.
-4. In your `.env`, set:
-   ```
-   LM_STUDIO_BASE_URL=http://localhost:1234/v1
-   LOCAL_MODEL_NAME=gemma-3-4b-instruct   # copy exact ID from LM Studio Developer tab
-   ```
-5. In the Streamlit sidebar, select **Local (LM Studio)** under Extraction Backend and click **Extract**.
+There isn't one — it just works:
 
-> If LM Studio is not running when you click Extract, you will see a clear error: *"LM Studio is not reachable — open LM Studio and click Start Server in the Developer tab."*
+1. Open the **Local** page in the app and click **Extract**.
+2. On first use, the model downloads automatically (~2.5 GB; a few minutes depending on your connection). Subsequent extractions are fast, since the model stays loaded in memory for the life of the process.
+
+To use a different MLX vision model, set `LOCAL_MODEL_REPO` in `.env` to any `mlx-community` vision-language repo id.
+
+> Local mode requires Apple Silicon macOS. On other platforms (Linux, Windows, Intel Mac, or inside the Docker image), the Local page clearly reports it's unavailable — use Cloud mode instead.
+
+---
+
+## Building the Mac App
+
+DocumentAgent can be packaged as a double-clickable `.app` — no terminal or `pip install` needed to run it:
+
+```bash
+bash packaging/build_mac_app.sh
+open dist/DocumentAgent.app   # first launch: right-click → Open (ad-hoc signed, unnotarized)
+```
+
+The build script creates a self-contained bundle (app source + a real Python venv with Streamlit/MLX installed) under `dist/DocumentAgent.app`. Launching it starts the server in the background and opens your browser to it automatically; quitting stops the server. Model weights are not bundled — they download to your Hugging Face cache on first extraction, same as running from source.
 
 ---
 
@@ -228,6 +235,54 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the full pipeline diagram, cost break
 
 ---
 
+## Evaluating Extraction Quality
+
+`benchmarks/eval_models.py` compares any number of local MLX models and/or
+Landing AI ADE variants side by side on the same document dataset, so a
+model swap is judged on this project's actual documents (Indian handwriting,
+GST invoices, mixed Hindi/English forms) rather than general-purpose
+benchmarks:
+
+```bash
+# Built-in candidate set: current default + two Qwen2.5-VL sizes + AIDE
+python benchmarks/eval_models.py \
+    --dataset-dir benchmarks/dataset \
+    --api-key YOUR_LANDING_AI_KEY \
+    --defaults
+
+# Or specify your own model list
+python benchmarks/eval_models.py \
+    --dataset-dir benchmarks/dataset \
+    --api-key YOUR_LANDING_AI_KEY \
+    --model gemma-4b=local:mlx-community/gemma-3-4b-it-4bit \
+    --model qwen7b=local:mlx-community/Qwen2.5-VL-7B-Instruct-4bit \
+    --model aide-mini=cloud:dpt-2-mini
+
+# Also include a model served through a running LM Studio instance —
+# benchmark-only; LM Studio is not a runtime dependency of the app itself
+python benchmarks/eval_models.py \
+    --dataset-dir benchmarks/dataset \
+    --model qwen3b=local:mlx-community/Qwen2.5-VL-3B-Instruct-4bit \
+    --model qwen-lmstudio=lmstudio:qwen2.5-vl-7b-instruct \
+    --lmstudio-base-url http://localhost:1234/v1
+```
+
+Writes `benchmarks/model_comparison.json` (raw per-document results) and
+`benchmarks/model_comparison.md` (ranked summary + per-category breakdown).
+Each local model is downloaded on first use (same as normal app usage) — the
+7B Qwen2.5-VL variant is ~4.5 GB. An `lmstudio:` spec instead calls a model
+already loaded in [LM Studio](https://lmstudio.ai/)'s local server (OpenAI-
+compatible REST API) — useful for comparing a model only available as a GGUF
+build, but purely a benchmarking convenience: the app's own Local mode always
+runs embedded via Apple MLX (see [ARCHITECTURE.md](ARCHITECTURE.md)).
+`--strict` exits 1 if every local model trails the best cloud model by more
+than 15 percentage points, for CI gating.
+
+To switch the app's local model once you've picked a winner, set
+`LOCAL_MODEL_REPO` in `.env` (see `.env.example`) — no code changes needed.
+
+---
+
 ## Running Tests
 
 ```bash
@@ -236,7 +291,7 @@ pip install pytest pytest-cov
 pytest tests/ -v --cov=storage --cov=handler --cov=local_model --cov-report=term-missing
 ```
 
-All tests are mocked — no AWS credentials or LM Studio instance required.
+All tests are mocked — no AWS credentials or local model download required.
 
 ---
 
@@ -262,6 +317,6 @@ License to be decided. See [LICENSE](LICENSE) once finalised.
 - [Landing AI AIDE](https://va.landing.ai/)
 - [Strands Agents](https://github.com/strands-agents/strands-agents)
 - [AWS Bedrock](https://aws.amazon.com/bedrock/)
-- [Gemma Model Family](https://ai.google.dev/gemma)
-- [LM Studio](https://lmstudio.ai)
+- [Qwen2.5-VL](https://github.com/QwenLM/Qwen2.5-VL) / [Gemma Model Family](https://ai.google.dev/gemma)
+- [Apple MLX](https://github.com/ml-explore/mlx) / [mlx-vlm](https://github.com/Blaizzy/mlx-vlm)
 - [Streamlit](https://streamlit.io)

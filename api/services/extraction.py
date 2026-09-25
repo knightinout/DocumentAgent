@@ -33,25 +33,29 @@ def _validate_suffix(filename: str) -> str:
     return suffix
 
 
-def run_local(doc_bytes: bytes, filename: str) -> dict:
-    """Extract text using the local LM Studio model.
+def run_local(doc_bytes: bytes, filename: str, repo_id: str | None = None) -> dict:
+    """Extract text using the embedded local MLX model.
 
     Args:
         doc_bytes: Raw file bytes.
         filename:  Original filename (used to determine extension).
+        repo_id:   Optional Hugging Face repo id to override the configured
+                   default model for this call only (e.g. for benchmarking
+                   multiple local models against the same dataset).
 
     Returns:
         Extraction result dict (see module docstring).
 
     Raises:
         ValueError:   Unsupported file extension.
-        RuntimeError: LM Studio not reachable.
+        RuntimeError: Local model unavailable (unsupported platform or
+                      first-run download failed).
     """
     from local_model import LocalModelClient
 
     suffix = _validate_suffix(filename)
-    client = LocalModelClient()
-    model_name = client._model
+    client = LocalModelClient(repo_id=repo_id)
+    model_name = client.model_id
 
     tmp_path: Path | None = None
     try:
@@ -143,7 +147,7 @@ def run(
     Args:
         doc_bytes:  Raw file bytes.
         filename:   Original filename.
-        use_local:  If True use LM Studio; if False use Landing AI ADE.
+        use_local:  If True use the embedded local MLX model; if False use Landing AI ADE.
         api_key:    Required when ``use_local=False``.
         model:      ADE model variant (ignored for local).
 

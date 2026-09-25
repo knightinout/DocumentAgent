@@ -38,7 +38,7 @@ async def extract(
 
     Multipart form fields:
     - **file**: Document file (required).
-    - **use_local**: ``true`` → LM Studio local model; ``false`` → Landing AI ADE (default: true).
+    - **use_local**: ``true`` → embedded local MLX model; ``false`` → Landing AI ADE (default: true).
     - **api_key**: Landing AI API key (required when ``use_local=false``).
     - **model**: ADE model variant — ``dpt-2-mini`` | ``dpt-2-latest`` (default: dpt-2-mini).
 
