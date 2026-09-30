@@ -44,7 +44,7 @@ export default function SettingsScreen() {
         <Text style={styles.cardTitle}>Extraction Backend</Text>
         <View style={styles.toggleRow}>
           <Text style={styles.toggleLabel}>
-            {session.useLocal ? "Local (on-device / LM Studio)" : "Cloud (Landing AI)"}
+            {session.useLocal ? "Local (on-device, Apple MLX)" : "Cloud (Landing AI)"}
           </Text>
           <Switch
             value={session.useLocal}
@@ -55,7 +55,7 @@ export default function SettingsScreen() {
         </View>
         <Text style={styles.hint}>
           {session.useLocal
-            ? "Local mode: no data leaves the device. Requires LM Studio running."
+            ? "Local mode: no data leaves the device. Runs entirely on the Mac — no setup needed."
             : "Cloud mode: images sent to Landing AI servers. Requires API key."}
         </Text>
       </View>

@@ -9,6 +9,12 @@
 > Local results were collected using Gemma 3 4B IT (VLM, Q4\_K\_M) served via LM Studio
 > on an Apple M2 Pro (CPU-only inference). GPU inference will be ~3× faster.
 > To reproduce, see the **Reproducing This Benchmark** section below.
+>
+> **Runtime update:** the local path now runs via embedded Apple MLX
+> (Metal-accelerated) instead of LM Studio — same model, in-process instead of
+> over HTTP to a separate server. The accuracy numbers below still apply (same
+> model weights); the CPU latency figure does not — re-running the benchmark
+> with the current MLX runtime is a valuable follow-up.
 
 ---
 
@@ -148,7 +154,8 @@ Local Gemma is free at inference time after the one-time ~2.5 GB model download.
 # 1. Generate the dataset (one-time, ~20 seconds)
 python scripts/generate_benchmark_dataset.py
 
-# 2a. Run local backend (requires LM Studio running on port 1234 with gemma-3-4b loaded)
+# 2a. Run local backend (embedded Apple MLX — Apple Silicon Mac required;
+#     downloads the model automatically on first run)
 python benchmarks/run_benchmark.py \
     --dataset-dir benchmarks/dataset \
     --backend local \

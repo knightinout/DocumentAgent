@@ -1,6 +1,6 @@
 """Tests for POST /api/v1/extract.
 
-All extraction calls are mocked — no LM Studio or Landing AI API required.
+All extraction calls are mocked — no local model or Landing AI API required.
 """
 
 import io
@@ -148,7 +148,7 @@ class TestExtractValidation:
     async def test_backend_unreachable_returns_502(self, client):
         with patch(
             "api.services.extraction.run_local",
-            side_effect=RuntimeError("LM Studio is not reachable"),
+            side_effect=RuntimeError("Local model is not available"),
         ):
             response = await client.post(
                 "/api/v1/extract",

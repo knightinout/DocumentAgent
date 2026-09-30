@@ -304,7 +304,7 @@ def extract_and_match(
         answer_key:    Optional structured answer key:
                        ``[{question_id, max_marks, keywords, partial_keywords}]``
         student_label: Optional student identifier.
-        use_local:     True → LM Studio; False → Landing AI.
+        use_local:     True → embedded local MLX model; False → Landing AI.
         api_key:       Required when ``use_local=False``.
         model:         ADE model variant.
 

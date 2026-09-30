@@ -160,7 +160,7 @@ class TestFormFillValidation:
     async def test_backend_unreachable_returns_502(self, client):
         with patch(
             "api.services.form_filler.fill",
-            side_effect=RuntimeError("LM Studio is not reachable"),
+            side_effect=RuntimeError("Local model is not available"),
         ):
             response = await client.post(
                 "/api/v1/forms/fill",

@@ -42,7 +42,7 @@ async def grade_extract(
     file: Annotated[UploadFile, File(description="Student answer sheet (PDF/PNG/JPEG)")],
     use_local: Annotated[bool, Form()] = True,
     api_key: Annotated[str, Form()] = "",
-    model: Annotated[str, Form()] = "dpt-2-mini",
+    model: Annotated[str, Form()] = "dpt-2-latest",
     student_label: Annotated[str, Form()] = "",
     keywords: Annotated[str, Form(description="Comma-separated answer key terms")] = "",
     answer_key: Annotated[
@@ -151,7 +151,7 @@ async def rubric_evaluate(
     file: Annotated[UploadFile, File(description="Student answer sheet (PDF/PNG/JPEG)")],
     use_local: Annotated[bool, Form()] = True,
     api_key: Annotated[str, Form()] = "",
-    model: Annotated[str, Form()] = "dpt-2-mini",
+    model: Annotated[str, Form()] = "dpt-2-latest",
     student_label: Annotated[str, Form()] = "",
 ) -> RubricEvaluateResponse:
     """Two-stage pipeline: extract markdown → score against the named rubric.

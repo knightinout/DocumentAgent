@@ -6,7 +6,7 @@ This document covers how DocumentAgent handles student data when used by teacher
 
 ## 1. Data Flow Diagram
 
-### Local Backend (LM Studio / Gemma 3 4B)
+### Local Backend (Embedded Apple MLX / Gemma 3 4B)
 
 ```
 Teacher's Phone / Tablet
@@ -22,19 +22,22 @@ Teacher's Phone / Tablet
                 ▼
 ┌───────────────────────────────────┐
 │  DocumentAgent FastAPI API        │
-│  (school server / local laptop)   │
+│  (school Mac — Apple Silicon)     │
 │                                   │
 │  • image written to /tmp (RAM)    │
-│  • passed to LM Studio via        │
-│    localhost:1234                 │
+│  • passed to the embedded MLX     │
+│    model in the same process      │
+│    (no HTTP, no separate server)  │
 │  • /tmp file deleted immediately  │
 └───────────────┬───────────────────┘
-                │  base64 image + prompt
+                │  in-process function call
                 ▼
 ┌───────────────────────────────────┐
-│  LM Studio (localhost:1234)       │
-│  Gemma 3 4B — on device           │
+│  Apple MLX — Gemma 3 4B           │
+│  on device, in-process            │
 │  NO external network calls        │
+│  (except a one-time model         │
+│   download on first use)          │
 └───────────────┬───────────────────┘
                 │  extracted markdown
                 ▼
@@ -158,11 +161,13 @@ from unittest.mock import patch, MagicMock
 
 @pytest.mark.anyio
 async def test_local_mode_no_external_calls(client):
-    """Local mode must not contact any external host."""
-    with patch("openai.resources.chat.completions.Completions.create") as mock_llm:
-        mock_llm.return_value = MagicMock(
-            choices=[MagicMock(message=MagicMock(content="# Extracted"))]
-        )
+    """Local mode must not contact any external host (beyond the one-time
+    model download, which is out of scope for this per-request check)."""
+    with patch("local_model._load_engine") as mock_load_engine, \
+         patch("mlx_vlm.generate") as mock_generate, \
+         patch("mlx_vlm.prompt_utils.apply_chat_template", side_effect=lambda *a, **kw: ""):
+        mock_load_engine.return_value = (MagicMock(), MagicMock(), {})
+        mock_generate.return_value = MagicMock(text="# Extracted")
         # Patch socket to catch any real outgoing connections
         with patch("socket.getaddrinfo", side_effect=AssertionError("External DNS lookup!")):
             response = await client.post(
@@ -170,8 +175,8 @@ async def test_local_mode_no_external_calls(client):
                 files=[("file", ("test.png", b"<png bytes>", "image/png"))],
                 data={"use_local": "true"},
             )
-    # The LLM call was made to localhost (mocked above), no external DNS
-    assert response.status_code in (200, 502)  # 502 if LM Studio mock doesn't fully match
+    # Generation ran entirely in-process (mocked above), no external DNS
+    assert response.status_code in (200, 502)  # 502 if the mock doesn't fully match
 ```
 
 Run with:
@@ -187,7 +192,7 @@ All endpoints are rate-limited per client IP:
 
 | Backend | Limit |
 |---|---|
-| Local (LM Studio) | 10 requests / minute |
+| Local (embedded MLX) | 10 requests / minute |
 | Cloud (Landing AI) | 1 request / minute |
 
 Rate limit headers are returned in 429 responses. This prevents accidental bulk upload of student data.

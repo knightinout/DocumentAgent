@@ -38,7 +38,6 @@ Identity documents (admin):
 
 import json
 import logging
-import os
 import re
 import time
 from typing import Any
@@ -142,27 +141,17 @@ def _extract_json_from_text(text: str) -> dict:
 
 
 def _call_llm_json(prompt: str) -> dict:
-    """Call the local LM Studio model with a JSON-extraction prompt.
+    """Call the shared local MLX engine with a JSON-extraction prompt.
 
-    Returns an empty dict if the model is unreachable or returns unparseable output.
+    Returns an empty dict if the model is unavailable or returns unparseable output.
     """
-    from openai import OpenAI
+    from local_model import generate_text
 
-    base_url = os.environ.get("LM_STUDIO_BASE_URL", "http://localhost:1234/v1")
-    model = os.environ.get("LOCAL_MODEL_NAME", "gemma-3-4b-instruct")
-
-    client = OpenAI(base_url=base_url, api_key="lm-studio", timeout=120.0)
     try:
-        response = client.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.0,
-            max_tokens=1024,
-        )
-        raw = response.choices[0].message.content or "{}"
-        return _extract_json_from_text(raw)
+        raw = generate_text(prompt, max_tokens=1024, temperature=0.0)
+        return _extract_json_from_text(raw or "{}")
     except Exception as exc:
-        logger.warning("LLM JSON call failed: %s", exc)
+        logger.warning("Local model JSON call failed: %s", exc)
         return {}
 
 
@@ -205,7 +194,7 @@ def fill(
     *,
     use_local: bool = True,
     api_key: str | None = None,
-    model: str = "dpt-2-mini",
+    model: str = "dpt-2-latest",
     answer_key: dict | None = None,
 ) -> FormFillResult:
     """Run the two-stage form-fill pipeline.
@@ -213,7 +202,7 @@ def fill(
     Args:
         docs:        List of (file_bytes, filename) tuples.
         template_id: One of the keys in ``_TEMPLATES``.
-        use_local:   Use local LM Studio backend for stage-1 extraction.
+        use_local:   Use the embedded local MLX backend for stage-1 extraction.
         api_key:     Required when ``use_local=False``.
         model:       ADE model variant (cloud only).
         answer_key:  Optional dict ``{field: expected_value}`` for grading templates.

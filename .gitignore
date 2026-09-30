@@ -8,3 +8,4 @@ tmp_upload.*
 documentagent.log*
 outputs/
 .aider*
+dist/

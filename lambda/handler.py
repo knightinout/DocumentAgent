@@ -14,7 +14,9 @@ One of (in order of preference):
   VISION_AGENT_API_KEY   — direct env var (local testing only)
 
 Optional:
-  ADE_MODEL              — 'dpt-2-mini' (default) or 'dpt-2-latest'
+  ADE_MODEL              — 'dpt-2-latest' (default) or 'dpt-2-mini' (has returned
+                           422 Unsupported model against current API keys — verify
+                           before relying on it)
 """
 
 import json
@@ -32,7 +34,7 @@ logger.setLevel(logging.INFO)
 _REGION = os.environ.get("AWS_REGION", "us-east-1")  # Lambda sets this automatically
 _KB_ID = os.environ["BEDROCK_KB_ID"]
 _DS_ID = os.environ["BEDROCK_DS_ID"]
-_MODEL = os.getenv("ADE_MODEL", "dpt-2-mini")
+_MODEL = os.getenv("ADE_MODEL", "dpt-2-latest")
 
 _s3 = boto3.client("s3", region_name=_REGION)
 _secrets = boto3.client("secretsmanager", region_name=_REGION)

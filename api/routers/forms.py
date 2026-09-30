@@ -37,7 +37,7 @@ async def forms_fill(
     ],
     use_local: Annotated[bool, Form()] = True,
     api_key: Annotated[str, Form()] = "",
-    model: Annotated[str, Form()] = "dpt-2-mini",
+    model: Annotated[str, Form()] = "dpt-2-latest",
 ) -> FormFillResponse:
     """Extract structured fields from uploaded ID/source documents.
 

@@ -26,16 +26,14 @@ services:
     ports:
       - "8000:8000"
     environment:
-      # Local model — points to LM Studio running on the host machine
-      LM_STUDIO_BASE_URL: "${LM_STUDIO_BASE_URL:-http://host.docker.internal:1234/v1}"
-      LOCAL_MODEL_NAME: "${LOCAL_MODEL_NAME:-gemma-3-4b-instruct}"
+      # Note: local extraction (embedded Apple MLX) requires Apple Silicon
+      # macOS and is unavailable inside this Linux container — the /health
+      # endpoint will report local_model_available: false here. Cloud mode
+      # is unaffected.
       # Cloud backend (optional)
       VISION_AGENT_API_KEY: "${VISION_AGENT_API_KEY:-}"
       # CORS: comma-separated list of allowed origins, or * for all
       CORS_ORIGINS: "${CORS_ORIGINS:-*}"
-    extra_hosts:
-      # Allows container to reach LM Studio on the host
-      - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
       interval: 30s
@@ -54,11 +52,9 @@ services:
     ports:
       - "8501:8501"
     environment:
-      LM_STUDIO_BASE_URL: "${LM_STUDIO_BASE_URL:-http://host.docker.internal:1234/v1}"
-      LOCAL_MODEL_NAME: "${LOCAL_MODEL_NAME:-gemma-3-4b-instruct}"
+      # Local mode is unavailable in this container (see api service comment
+      # above) — the Streamlit UI will surface that clearly; Cloud mode works.
       VISION_AGENT_API_KEY: "${VISION_AGENT_API_KEY:-}"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     command: ["streamlit", "run", "app.py", "--server.port", "8501", "--server.address", "0.0.0.0"]
     depends_on:
       api:

@@ -34,6 +34,12 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
+# Make the project root importable (for `from api.services... import ...`
+# below) regardless of how this script is invoked — direct `python
+# benchmarks/eval_form_fill.py` only puts this file's own directory on
+# sys.path, not the project root.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
@@ -122,7 +128,7 @@ def evaluate(
     eval_dir: Path,
     backend: str = "local",
     api_key: str = "",
-    model: str = "dpt-2-mini",
+    model: str = "dpt-2-latest",
 ) -> dict:
     """Evaluate all images in *eval_dir* against their ground truth JSONs.
 
@@ -302,7 +308,7 @@ def main() -> None:
     parser.add_argument("--eval-dir", required=True, help="Eval directory with PNG + JSON pairs")
     parser.add_argument("--backend", choices=["local", "cloud"], default="local")
     parser.add_argument("--api-key", default="", help="Landing AI API key (cloud only)")
-    parser.add_argument("--model", default="dpt-2-mini")
+    parser.add_argument("--model", default="dpt-2-latest")
     parser.add_argument(
         "--format", choices=["text", "markdown", "json"], default="text"
     )
