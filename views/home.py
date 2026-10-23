@@ -2,10 +2,22 @@
 
 import streamlit as st
 
-from common import page_header
+from common import page_header, sidebar_base
 
 
 def render() -> None:
+    sidebar_base()
+    with st.sidebar:
+        st.markdown("**About**")
+        st.caption(
+            "DocumentAgent extracts structured text from PDFs and images "
+            "using cloud or on-device AI models. Output is clean Markdown — "
+            "tables, key-value pairs, and text preserved."
+        )
+        st.divider()
+        st.markdown("**Supported Formats**")
+        st.caption("PDF · PNG · JPG · JPEG")
+
     page_header(
         "Extract structured text from any document",
         "Pick how you want your documents processed. Both modes produce the same "
@@ -52,7 +64,7 @@ def render() -> None:
             <div class="da-mode-card da-mode-local">
                 <span class="da-mode-icon">🖥️</span>
                 <h3>Local Extraction</h3>
-                <p>Runs Gemma 3 4B on your own machine via Apple MLX. No document
+                <p>Runs Qwen2.5-VL-3B on your own machine via Apple MLX. No document
                 or image ever leaves your device — ideal for sensitive or
                 offline work.</p>
                 <div class="da-mode-tags">

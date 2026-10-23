@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from fnmatch import fnmatch
 from pathlib import Path
 
-_DEFAULT_REPO = os.environ.get("LOCAL_MODEL_REPO", "mlx-community/Qwen2.5-VL-3B-Instruct-4bit")
+_DEFAULT_REPO = os.environ.get("LOCAL_MODEL_REPO", "mlx-community/Qwen2.5-VL-7B-Instruct-4bit")
 
 _EXTRACT_PROMPT = (
     "Extract all text, tables, and key-value pairs from this document image. "
@@ -123,6 +123,8 @@ def is_model_ready(repo_id: str | None = None) -> bool:
         return False
 
     weights_path = try_to_load_from_cache(resolved_repo, "model.safetensors")
+    if not isinstance(weights_path, str):
+        weights_path = try_to_load_from_cache(resolved_repo, "model-00001-of-00002.safetensors")
     if not isinstance(weights_path, str):
         return False
     try:
@@ -378,7 +380,7 @@ def _load_engine(repo_id: str) -> tuple:
             raise RuntimeError(
                 f"Could not load local model '{repo_id}'. If this is the "
                 "first run, an internet connection is required once to "
-                "download the model (~2.5 GB for the default model). "
+                "download the model (~5 GB for the default model). "
                 f"Original error: {exc}"
             ) from exc
 
@@ -403,11 +405,11 @@ def _run_generate(
     from mlx_vlm import generate
     from mlx_vlm.prompt_utils import apply_chat_template
 
-    formatted_prompt = apply_chat_template(
-        processor, config, prompt, num_images=1 if image_path else 0
-    )
-
     with _generation_lock:
+        formatted_prompt = apply_chat_template(
+            processor, config, prompt, num_images=1 if image_path else 0
+        )
+
         result = generate(
             model,
             processor,
@@ -419,6 +421,46 @@ def _run_generate(
         )
 
     return _strip_code_fence(result.text or "")
+
+
+def _run_generate_chat(
+    messages: list[dict],
+    *,
+    max_tokens: int = 2048,
+    temperature: float = 0.1,
+    repo_id: str | None = None,
+) -> str:
+    """Run a text-only multi-turn refinement using conversation context.
+
+    Takes the last assistant message (the extraction) and the latest user
+    request, and builds a focused refinement prompt. Used for refinement
+    turns after initial extraction via parse().
+    """
+    last_extraction = ""
+    latest_request = ""
+    for msg in reversed(messages):
+        content = msg["content"]
+        if isinstance(content, list):
+            text_parts = [p["text"] for p in content if isinstance(p, dict) and p.get("type") == "text"]
+            content = " ".join(text_parts) if text_parts else ""
+        if msg["role"] == "user" and not latest_request:
+            latest_request = content
+        elif msg["role"] == "assistant" and not last_extraction:
+            last_extraction = content
+
+    prompt = (
+        f"Here is a document extraction:\n\n{last_extraction}\n\n"
+        f"User request: {latest_request}\n\n"
+        f"Respond to the user's request. Output only the result, no commentary."
+    )
+
+    return _run_generate(
+        prompt,
+        image_path=None,
+        max_tokens=max_tokens,
+        temperature=temperature,
+        repo_id=repo_id,
+    )
 
 
 def generate_text(
@@ -461,6 +503,23 @@ class LocalModelClient:
     def __init__(self, repo_id: str | None = None) -> None:
         self._model = repo_id or _DEFAULT_REPO
         self.model_id = self._model
+
+    def chat(
+        self,
+        messages: list[dict],
+        *,
+        max_tokens: int = 2048,
+        temperature: float = 0.1,
+        model: str | None = None,
+    ) -> str:
+        """Multi-turn text-only chat for refining prior extraction results."""
+        active_repo = model or self._model
+        return _run_generate_chat(
+            messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            repo_id=active_repo,
+        )
 
     def parse(self, document: Path, model: str | None = None) -> LocalModelResponse:
         """Extract text, tables, and key-value pairs from a document.

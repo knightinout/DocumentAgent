@@ -5,7 +5,7 @@ from pathlib import Path
 import streamlit as st
 from dotenv import load_dotenv
 
-from common import init_session, inject_theme
+from common import init_session, inject_header, inject_theme
 from nav import PAGES
 
 _log_dir = Path.home() / "Library" / "Logs" / "DocumentAgent"
@@ -22,6 +22,7 @@ st.set_page_config(page_title="DocumentAgent", page_icon="📄", layout="wide")
 
 init_session()
 inject_theme()
+inject_header()
 
-nav = st.navigation(PAGES, position="top")
+nav = st.navigation(PAGES, position="sidebar")
 nav.run()

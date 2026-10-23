@@ -9,7 +9,7 @@ import streamlit as st
 from landingai_ade import LandingAIADE
 
 import storage
-from common import document_source_picker, page_header, render_pdf_first_page, render_result
+from common import document_source_picker, page_header, render_pdf_first_page, render_result, sidebar_base
 
 _SAMPLE_MARKDOWN = """# Invoice #INV-2023-001
 **Date**: October 24, 2023
@@ -34,6 +34,7 @@ _SAMPLE_MARKDOWN = """# Invoice #INV-2023-001
 
 
 def render() -> None:
+    sidebar_base()
     page_header(
         "Cloud Extraction",
         "Sends documents to Landing AI's AIDE API for high-accuracy structured extraction.",
