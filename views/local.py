@@ -319,27 +319,24 @@ def render() -> None:
                 )
             st.markdown(msg["content"])
 
-    # ── Chat input area with attachment button ────────────────────────────
-    col_attach, col_input = st.columns([1, 11])
-
-    with col_attach:
-        uploader_key = f"local_chat_uploader_{st.session_state.local_uploader_key}"
+    # ── File uploader (visible, above chat input) ───────────────────────
+    uploader_key = f"local_chat_uploader_{st.session_state.local_uploader_key}"
+    with st.expander("📎 Attach documents", expanded=False):
         uploaded_files = st.file_uploader(
-            "+",
+            "Drop files here",
             type=["pdf", "png", "jpg", "jpeg"],
             accept_multiple_files=True,
             key=uploader_key,
             label_visibility="collapsed",
         )
 
-    with col_input:
-        has_docs = len(st.session_state.local_chat_documents) > 0
-        placeholder = "Ask to refine the extraction..." if has_docs else "Upload a document to begin..."
-        prompt = st.chat_input(
-            placeholder,
-            key="local_chat_input",
-            disabled=st.session_state.get("local_extracting", False),
-        )
+    has_docs = len(st.session_state.local_chat_documents) > 0
+    placeholder = "Ask to refine the extraction..." if has_docs else "Upload a document to begin..."
+    prompt = st.chat_input(
+        placeholder,
+        key="local_chat_input",
+        disabled=st.session_state.get("local_extracting", False),
+    )
 
     # ── Detect new uploads and auto-extract ───────────────────────────────
     if uploaded_files and not st.session_state.get("local_downloading") and not st.session_state.get("local_extracting"):

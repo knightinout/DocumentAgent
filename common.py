@@ -520,52 +520,7 @@ def inject_theme() -> None:
         }}
         [data-da-theme="dark"] .da-doc-card-name {{ color: #bac2de; }}
 
-        /* ── Chat input area: compact + attach button ─────────────── */
-        [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzoneInput"] + div {{
-            display: none;
-        }}
-        /* Style the entire uploader column to look like a + button */
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(> div > div > [data-testid="stFileUploader"][data-testid-key*="local_chat_uploader"]) {{
-            display: flex; align-items: flex-end; justify-content: center;
-            padding-bottom: 8px;
-        }}
-        [data-testid="stFileUploader"][data-testid-key*="local_chat_uploader"] {{
-            min-height: 0 !important;
-        }}
-        [data-testid="stFileUploader"][data-testid-key*="local_chat_uploader"] section {{
-            background: transparent !important;
-            border: none !important;
-            padding: 0 !important;
-            min-height: 0 !important;
-        }}
-        [data-testid="stFileUploader"][data-testid-key*="local_chat_uploader"] section > div:first-child {{
-            display: none;
-        }}
-        [data-testid="stFileUploader"][data-testid-key*="local_chat_uploader"] button {{
-            width: 40px !important; height: 40px !important;
-            border-radius: 50% !important;
-            padding: 0 !important;
-            font-size: 1.4rem !important;
-            display: flex !important; align-items: center !important; justify-content: center !important;
-            background: {SURFACE} !important;
-            border: 1px solid {BORDER} !important;
-            color: {MUTED} !important;
-            cursor: pointer !important;
-            min-height: 0 !important;
-        }}
-        [data-testid="stFileUploader"][data-testid-key*="local_chat_uploader"] button:hover {{
-            background: #e2e8f0 !important;
-            color: {INK} !important;
-        }}
-        [data-da-theme="dark"] [data-testid="stFileUploader"][data-testid-key*="local_chat_uploader"] button {{
-            background: #313244 !important;
-            border-color: #45475a !important;
-            color: #a6adc8 !important;
-        }}
-        [data-da-theme="dark"] [data-testid="stFileUploader"][data-testid-key*="local_chat_uploader"] button:hover {{
-            background: #45475a !important;
-            color: #cdd6f4 !important;
-        }}
+        /* ── Attach expander styling ──────────────────────────────── */
 
         /* ── Copy / Download action buttons in chat ───────────────── */
         div[data-testid="stHorizontalBlock"] button[data-testid*="copy_"],
